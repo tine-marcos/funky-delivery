@@ -3,473 +3,428 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Funky Food - Delivery Pay Computations</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<title>Funky Food · Delivery Pay</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* Funky Food palette */
-    --cream:       #fffaf5;
-    --cream-dark:  #f5ede3;
-    --olive:       #3a6b3a;
-    --olive-mid:   #569556;
-    --olive-light: #6aab6a;
-    --olive-pale:  #e8f5e8;
-    --peach:       #f0a07a;
-    --peach-pale:  #fde8d8;
-    --yellow:      #f5c842;
-    --yellow-pale: #fef8d8;
-
-    /* city accents — cream & greens only */
-    --brisbane:       #3a6b4a;   /* same as melbourne */
-    --brisbane-light: #e8f5e8;
-    --melbourne:      #3a6b4a;   /* mid green */
-    --melbourne-light: #eaf3e8;
-    --sydney:         #7ab87a;   /* lighter brand green */
-    --sydney-light:   #f0f8f0;
-
-    --text:       #1b1c1e;
-    --text-muted: #5a5a5a;
-    --border:     #d8d2c4;
-    --surface:    #ffffff;
-    --surface2:   #f5f2ea;
-    --shadow:     0 2px 14px rgba(30,58,47,0.08);
-    --radius:     14px;
+    --bg:        #f5f2e8;
+    --surface:   #ffffff;
+    --border:    #e8e4d8;
+    --olive:     #1e3a2f;
+    --olive-btn: #2d5a3d;
+    --green-pill:#2d5a3d;
+    --text:      #1b1c1e;
+    --text-muted:#8a8a8a;
+    --text-label:#6b6b6b;
+    --accent:    #569556;
+    --red:       #c0392b;
+    --cream-dark:#ede9df;
+    --shadow:    0 1px 4px rgba(0,0,0,0.06);
+    --radius:    12px;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Sora', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
 
-  /* ── HEADER ── */
-  header {
-    background: var(--cream);
-    color: #1b1c1e;
-    padding: 0 36px;
+  /* ── TOP NAV ── */
+  .topnav {
     display: flex; align-items: center; justify-content: space-between;
-    height: 64px;
-    position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 2px 12px rgba(30,58,47,0.08); border-bottom: 2px solid var(--border);
+    padding: 14px 32px; background: var(--bg); position: sticky; top: 0; z-index: 100;
   }
-  .logo { display: flex; align-items: center; gap: 12px; }
-  .logo-icon {
-    width: 36px; height: 36px; background: var(--olive-pale); border-radius: 10px;
-    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  .topnav-left { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+  .topnav-logo { font-size: 22px; line-height: 1; }
+  .topnav-center { display: flex; align-items: center; gap: 8px; }
+  .nav-pill {
+    padding: 8px 20px; border-radius: 30px; border: none; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+    background: transparent; color: var(--text-muted); transition: all 0.15s;
   }
-  .logo-wordmark { font-size: 16px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo-sub { font-size: 11px; opacity: 0.6; font-weight: 400; margin-top: 1px; }
-  .date-pill {
-    background: var(--olive-pale); border: 1px solid var(--border);
-    border-radius: 20px; padding: 5px 14px; font-size: 12px; font-family: 'DM Mono', monospace;
+  .nav-pill:hover { background: var(--cream-dark); color: var(--text); }
+  .nav-pill.active { background: var(--olive); color: white; }
+  .topnav-right { display: flex; align-items: center; gap: 12px; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; color: var(--text-muted);
   }
-
-  /* ── TABS ── */
-  .tabs-bar {
-    background: var(--cream);
-    border-bottom: 2px solid var(--border);
-    display: flex; align-items: center; padding: 0 32px; gap: 0;
-    position: sticky; top: 64px; z-index: 99;
-    overflow-x: auto;
+  .user-avatar {
+    width: 32px; height: 32px; background: var(--olive); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 13px; font-weight: 700; cursor: pointer;
   }
-  .tab-btn {
-    padding: 14px 20px; border: none; background: transparent; cursor: pointer;
-    font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600;
-    color: #5a5a5a; border-bottom: 3px solid transparent;
-    margin-bottom: -2px; white-space: nowrap; transition: all 0.15s;
-    display: flex; align-items: center; gap: 7px;
-  }
-  .tab-btn:hover { color: #1b1c1e; }
-  .tab-btn.active { color: #569556; border-bottom-color: #569556; }
-  .tab-btn.weekly-tab { margin-left: auto; color: var(--text-muted); }
-  .tab-btn.weekly-tab.active { color: #1b1c1e; border-bottom-color: #1b1c1e; }
-  .tab-dots { display: flex; gap: 3px; align-items: center; }
-  .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.2s; }
-  .tab-dot.loaded.brisbane  { background: var(--brisbane); }
-  .tab-dot.loaded.melbourne { background: var(--melbourne); }
-  .tab-dot.loaded.sydney    { background: var(--sydney); }
 
   /* ── MAIN ── */
-  main { max-width: 1280px; margin: 0 auto; padding: 30px 28px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 32px; }
 
-  /* ── CITY SECTION ── */
-  .city-section {
-    border-radius: var(--radius); overflow: hidden;
-    margin-bottom: 22px; box-shadow: var(--shadow);
-    border: 1.5px solid var(--border);
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 12px; margin-top: 28px;
   }
-  .city-header {
+
+  /* ── CARD GRID ── */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+  .action-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+    display: flex; align-items: center; gap: 16px;
+    cursor: pointer; transition: all 0.15s; text-decoration: none; color: var(--text);
+  }
+  .action-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
+  .card-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    flex-shrink: 0;
+  }
+  .card-icon.green  { background: #2d5a3d; }
+  .card-icon.teal   { background: #00897b; }
+  .card-icon.orange { background: #e07a2f; }
+  .card-icon.purple { background: #5c6bc0; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .card-sub   { font-size: 12px; color: var(--text-muted); }
+
+  /* ── LIST SECTION ── */
+  .list-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .list-item {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 15px 22px; cursor: pointer; user-select: none;
-    transition: opacity 0.15s;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.1s; text-decoration: none; color: var(--text);
   }
-  .city-header:hover { opacity: 0.93; }
-  .city-header.brisbane  { background: var(--brisbane);  color: white; }
-  .city-header.melbourne { background: var(--melbourne); color: white; }
-  .city-header.sydney    { background: var(--sydney);    color: white; }
-  .city-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
-  .city-pill { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.18); padding: 3px 10px; border-radius: 20px; font-weight: 400; }
-  .city-status { font-size: 11px; opacity: 0.8; }
-  .city-chevron { font-size: 11px; opacity: 0.65; transition: transform 0.2s; }
-  .city-chevron.open { transform: rotate(180deg); }
-  .city-body { background: var(--surface); padding: 22px; }
+  .list-item:last-child { border-bottom: none; }
+  .list-item:hover { background: var(--bg); }
+  .list-item-left { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 500; }
+  .list-icon { font-size: 16px; opacity: 0.7; }
+  .list-chevron { color: var(--text-muted); font-size: 12px; }
 
-  /* ── UPLOAD ── */
-  .upload-pair { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-  .upload-card {
-    background: var(--cream); border-radius: 11px;
-    border: 2px dashed var(--border); padding: 20px 18px;
-    text-align: center; cursor: pointer; transition: all 0.2s;
-    flex: 1; min-width: 200px;
+  /* ── MODAL OVERLAY ── */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 200; display: flex;
+    align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto;
   }
-  .upload-card:hover, .upload-card.drag-over { border-color: var(--olive-light); background: var(--olive-pale); }
-  .upload-card.locked { opacity: 0.38; pointer-events: none; }
-  .upload-card.done { border-style: solid; border-color: var(--olive-light); background: var(--olive-pale); }
-  .upload-icon { font-size: 26px; margin-bottom: 7px; }
-  .upload-card h3 { font-size: 12px; font-weight: 700; margin-bottom: 3px; color: #1b1c1e; }
-  .upload-card p { font-size: 11px; color: var(--text-muted); }
+  .modal-box {
+    background: var(--surface); border-radius: 16px; width: 100%; max-width: 960px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2); margin-top: 20px; overflow: hidden;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--olive); color: white;
+  }
+  .modal-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .modal-close {
+    background: rgba(255,255,255,0.15); border: none; color: white;
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .modal-body { padding: 24px; max-height: 80vh; overflow-y: auto; }
+
+  /* ── CITY SUB TABS ── */
+  .city-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .city-tab {
+    padding: 7px 18px; border-radius: 20px; border: 1.5px solid var(--border);
+    background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+  }
+  .city-tab:hover { border-color: var(--accent); color: var(--text); }
+  .city-tab.active { background: var(--olive); color: white; border-color: var(--olive); }
+
+  /* ── UPLOAD AREA ── */
+  .upload-pair { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .upload-card {
+    flex: 1; min-width: 200px; background: var(--bg); border: 2px dashed var(--border);
+    border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; transition: all 0.15s;
+  }
+  .upload-card:hover, .upload-card.drag-over { border-color: var(--accent); background: #f0f7f0; }
+  .upload-card.done { border-style: solid; border-color: var(--accent); background: #f0f7f0; }
+  .upload-card.locked { opacity: 0.4; pointer-events: none; }
   .upload-card input { display: none; }
+  .upload-icon { font-size: 24px; margin-bottom: 6px; }
+  .upload-card h3 { font-size: 12px; font-weight: 700; margin-bottom: 3px; color: var(--text); }
+  .upload-card p { font-size: 11px; color: var(--text-muted); }
   .upload-btn {
     margin-top: 10px; background: var(--olive); color: white; border: none;
-    padding: 7px 16px; border-radius: 8px; font-family: 'Sora', sans-serif;
-    font-size: 11px; font-weight: 700; cursor: pointer; transition: background 0.15s;
+    padding: 7px 16px; border-radius: 8px; font-family: 'Inter', sans-serif;
+    font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  .upload-btn:hover { background: var(--olive-light); }
-  .file-name { margin-top: 7px; font-size: 10px; color: #1b1c1e; font-weight: 600; }
+  .upload-btn:hover { background: var(--accent); }
+  .file-name { margin-top: 6px; font-size: 10px; color: var(--accent); font-weight: 600; }
 
-  /* ── CONFIG ── */
-  .config-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-  .config-card { background: var(--cream); border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 140px; border: 1px solid var(--border); }
-  .config-card label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #5a5a5a; margin-bottom: 6px; }
-  .config-card input { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-family: 'DM Mono', monospace; font-size: 13px; background: white; outline: none; color: var(--text); }
-  .config-card input:focus { border-color: var(--olive-light); }
-
-  /* ── SECTION TITLE ── */
-  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #5a5a5a; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  /* ── CONFIG ROW ── */
+  .config-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .config-card { background: var(--bg); border-radius: 9px; padding: 12px 14px; flex: 1; min-width: 140px; border: 1px solid var(--border); }
+  .config-card label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 5px; }
+  .config-card input, .config-card select { width: 100%; border: 1.5px solid var(--border); border-radius: 7px; padding: 6px 9px; font-family: 'DM Mono', monospace; font-size: 13px; background: white; outline: none; color: var(--text); }
+  .config-card input:focus, .config-card select:focus { border-color: var(--accent); }
 
   /* ── DRIVER CARDS ── */
-  .drivers-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-  .driver-card { background: white; border-radius: 11px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: 0 1px 6px rgba(30,58,47,0.05); }
-  .driver-header { background: var(--olive-mid); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
-  .driver-name { font-size: 13px; font-weight: 700; color: white; }
-  .driver-stops { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.15); padding: 2px 9px; border-radius: 12px; }
+  .drivers-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+  .driver-card { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
+  .driver-header { background: var(--olive); color: white; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .driver-name { font-size: 13px; font-weight: 700; }
+  .driver-stops { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 10px; }
   .driver-body { padding: 14px; }
-  .fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 9px; margin-bottom: 11px; }
+  .fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px,1fr)); gap: 9px; margin-bottom: 10px; }
   .field-group { display: flex; flex-direction: column; gap: 3px; }
   .field-group label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
-  .field-group .val { font-family: 'DM Mono', monospace; font-size: 12px; background: var(--cream); border: 1.5px solid var(--border); border-radius: 6px; padding: 5px 8px; color: #1b1c1e; }
-  .field-group input[type="number"], .field-group input[type="time"] { font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; border: 1.5px solid var(--olive-light); border-radius: 6px; padding: 5px 8px; outline: none; width: 100%; color: var(--text); }
-  .field-group input:focus { box-shadow: 0 0 0 3px rgba(74,124,89,0.15); }
-  .tag-input { background: var(--olive-pale) !important; border-color: var(--olive-light) !important; }
-  .tag-input:focus { box-shadow: 0 0 0 3px rgba(74,124,89,0.18) !important; }
+  .field-group .val { font-family: 'DM Mono', monospace; font-size: 12px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 5px; padding: 5px 7px; color: var(--text); }
+  .field-group input[type="number"], .field-group input[type="time"] { font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; border: 1.5px solid var(--accent); border-radius: 5px; padding: 5px 7px; outline: none; width: 100%; color: var(--text); }
+  .tag-input { background: #fffaf5 !important; border-color: #e07a2f !important; }
 
-  /* ── RESULTS ── */
-  .results-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 7px; background: var(--cream); border-radius: 9px; padding: 11px; border: 1px solid var(--border); }
+  /* ── RESULTS STRIP ── */
+  .results-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px,1fr)); gap: 7px; background: var(--bg); border-radius: 8px; padding: 10px; border: 1px solid var(--border); }
   .result-item { display: flex; flex-direction: column; gap: 2px; }
-  .r-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #5a5a5a; }
-  .r-val { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: #1b1c1e; }
-  .r-val.warn { color: #e07a2f; } .r-val.bad { color: #c0392b !important; font-weight: 700; } .r-val.ok { color: #569556; }
+  .r-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+  .r-val { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text); }
+  .r-val.ok  { color: var(--accent); }
+  .r-val.bad { color: var(--red); font-weight: 700; }
+  .r-val.warn{ color: #e07a2f; }
 
-  /* ── CITY SUMMARY ── */
-  .city-summary { border-radius: 10px; overflow: hidden; margin-top: 18px; border: 1px solid var(--border); }
-  .cs-head { padding: 10px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
-  .cs-head.brisbane  { background: var(--brisbane-light);  color: var(--brisbane); }
-  .cs-head.melbourne { background: var(--melbourne-light); color: var(--melbourne); }
-  .cs-head.sydney    { background: var(--sydney-light);    color: var(--sydney); }
-  .cs-table { width: 100%; border-collapse: collapse; background: white; }
-  .cs-table th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--cream); }
-  .cs-table td { font-family: 'DM Mono', monospace; font-size: 11px; padding: 7px 14px; border-bottom: 1px solid var(--border); color: #1b1c1e; }
-  .cs-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12px; color: #1b1c1e; }
-  .cs-table tfoot td { font-weight: 700; background: var(--cream); border-bottom: none; }
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; }
+  .data-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+  .data-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-muted); padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .data-table td { font-family: 'DM Mono', monospace; font-size: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+  .data-table td:first-child { font-family: 'Inter', sans-serif; font-weight: 600; color: var(--text); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tfoot td { font-weight: 700; background: #f5f2e8; color: var(--text); }
+
+  /* ── SUMMARY CARD ── */
+  .summary-card { background: var(--olive); color: white; border-radius: var(--radius); padding: 22px 26px; margin-top: 16px; }
+  .summary-card h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 14px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 16px; }
+  .summary-item .s-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.6; margin-bottom: 4px; }
+  .summary-item .s-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+
+  /* ── CITY SECTION ── */
+  .city-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+  .city-section-header { background: var(--bg); padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+  .city-section-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .city-section-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
+  .city-section-body { padding: 18px; }
 
   /* ── ACTIONS ── */
-  .actions-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
-  .export-btn { background: var(--olive); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 10px rgba(30,58,47,0.2); transition: all 0.15s; }
-  .export-btn:hover { background: var(--olive-mid); transform: translateY(-1px); }
-  .export-btn.orange { background: var(--olive-light); color: white; box-shadow: 0 3px 10px rgba(74,124,89,0.25); }
-  .export-btn.orange:hover { background: var(--olive-mid); }
-  .clear-btn { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); padding: 9px 14px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 11px; cursor: pointer; transition: all 0.15s; }
-  .clear-btn:hover { border-color: var(--olive-light); color: var(--olive-light); }
+  .actions-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .btn-primary { background: var(--olive); color: white; border: none; padding: 10px 20px; border-radius: 9px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-secondary { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); padding: 9px 16px; border-radius: 9px; font-family: 'Inter', sans-serif; font-size: 12px; cursor: pointer; }
+  .btn-secondary:hover { border-color: var(--red); color: var(--red); }
 
   /* ── EMPTY STATE ── */
-  .empty-state { text-align: center; padding: 36px 20px; color: #5a5a5a; }
-  .empty-state .emoji { font-size: 40px; margin-bottom: 10px; }
-  .empty-state p { font-size: 13px; font-weight: 600; } .empty-state small { font-size: 11px; opacity: 0.7; }
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+  .empty-state .emoji { font-size: 36px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13px; font-weight: 500; } 
+  .empty-state small { font-size: 11px; opacity: 0.7; }
 
-  /* ── WEEKLY ── */
-  .weekly-day-block { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 16px; border: 1.5px solid var(--border); }
-  .weekly-day-header { background: var(--olive-pale); color: #1b1c1e; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
-  .weekly-day-header h3 { font-size: 14px; font-weight: 800; }
-  .weekly-day-header .day-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: #1b1c1e; }
-  .weekly-city-label { padding: 7px 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
-  .weekly-city-label.brisbane  { background: var(--olive-pale); color: #1b1c1e; }
-  .weekly-city-label.melbourne { background: var(--olive-pale); color: #1b1c1e; }
-  .weekly-city-label.sydney    { background: var(--olive-pale); color: #1b1c1e; }
-  .wi-table { width: 100%; border-collapse: collapse; }
-  .wi-table th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 20px 6px; text-align: left; border-bottom: 2px solid var(--border); background: var(--cream-dark); }
-  .wi-table td { font-family: 'DM Mono', monospace; font-size: 11px; padding: 7px 20px; border-bottom: 1px solid var(--border); color: #1b1c1e; }
-  .wi-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12px; color: #1b1c1e; }
-  .wi-table tr:last-child td { border-bottom: none; }
+  /* ── SECTION DIVIDER ── */
+  .section-divider { height: 1px; background: var(--border); margin: 24px 0; }
 
-  .weekly-grand { background: var(--olive); color: white; border-radius: var(--radius); padding: 22px 28px; margin-bottom: 22px; }
-  .weekly-grand h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 16px; }
-  .grand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 16px; }
-  .grand-item .grand-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.6; margin-bottom: 4px; }
-  .grand-item .grand-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
-
-  /* ── CITY SUB-TABS ── */
-  .city-subtabs { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
-  .city-subtab {
-    display: flex; align-items: center; gap: 7px;
-    padding: 9px 20px; border-radius: 30px; border: 2px solid var(--border);
-    background: var(--surface); cursor: pointer; font-family: 'Sora', sans-serif;
-    font-size: 13px; font-weight: 600; color: #5a5a5a; transition: all 0.15s;
-  }
-  .city-subtab:hover { border-color: var(--olive-light); color: #1b1c1e; }
-  .city-subtab.active { background: var(--olive); color: white; border-color: #1b1c1e; }
-  .city-subtab .subtab-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.6; }
-  .city-subtab.active .subtab-dot { opacity: 1; background: var(--olive-pale); }
-  .city-subtab .subtab-status { font-size: 10px; opacity: 0.7; }
-
-  @media (max-width:640px) { main { padding:14px; } header,.tabs-bar { padding-left:14px;padding-right:14px; } .fields-grid { grid-template-columns: 1fr 1fr; } }
+  @media(max-width:640px){ main{padding:14px;} .topnav{padding:12px 14px;} .card-grid{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <div class="logo-icon">🚚</div>
-    <div>
-      <div class="logo-wordmark">Funky Food</div>
-      <div class="logo-sub">Delivery Pay Computations</div>
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="topnav-left">
+    <span class="topnav-logo">~</span>
+  </div>
+  <div class="topnav-center">
+    <button class="nav-pill active" onclick="showPage('home')">Home</button>
+    <button class="nav-pill" onclick="showPage('delivery')">Delivery Pay</button>
+  </div>
+  <div class="topnav-right">
+    <div class="search-box">🔍 Search <span style="font-size:10px;opacity:0.5;margin-left:4px">⌘K</span></div>
+    <div class="user-avatar">T</div>
+  </div>
+</nav>
+
+<!-- HOME PAGE -->
+<main id="page-home">
+  <div class="section-label">Delivery Operations</div>
+  <div class="card-grid">
+    <div class="action-card" onclick="showPage('delivery')">
+      <div class="card-icon green">🚚</div>
+      <div>
+        <div class="card-title">Delivery Pay</div>
+        <div class="card-sub">Compute driver pay · All cities</div>
+      </div>
+    </div>
+    <div class="action-card" onclick="showPage('weekly')">
+      <div class="card-icon teal">⚡</div>
+      <div>
+        <div class="card-title">Weekly Summary</div>
+        <div class="card-sub">Full pay breakdown · Per city</div>
+      </div>
+    </div>
+    <div class="action-card" onclick="showPage('foodrelief')">
+      <div class="card-icon orange">📦</div>
+      <div>
+        <div class="card-title">Food Relief</div>
+        <div class="card-sub">Deductions · Transparency report</div>
+      </div>
+    </div>
+    <div class="action-card" onclick="showPage('fuel')">
+      <div class="card-icon green">⛽</div>
+      <div>
+        <div class="card-title">Fuel Reimbursement</div>
+        <div class="card-sub">KM driven · Compensation</div>
+      </div>
     </div>
   </div>
-  <div class="date-pill" id="todayDate"></div>
-</header>
 
-<div class="tabs-bar" id="tabsBar"></div>
-<main id="mainContent"></main>
+  <div class="section-label" style="margin-top:28px">Payroll</div>
+  <div class="list-section">
+    <div class="list-item" onclick="showPage('invoices')">
+      <div class="list-item-left"><span class="list-icon">🧾</span> Invoices</div>
+      <span class="list-chevron">›</span>
+    </div>
+  </div>
+
+  <div class="section-label">Status</div>
+  <div class="list-section">
+    <div class="list-item">
+      <div class="list-item-left"><span class="list-icon">🥦</span> Brisbane</div>
+      <span id="status-Brisbane" style="font-size:11px;color:var(--text-muted)">No data</span>
+    </div>
+    <div class="list-item">
+      <div class="list-item-left"><span class="list-icon">🥕</span> Melbourne</div>
+      <span id="status-Melbourne" style="font-size:11px;color:var(--text-muted)">No data</span>
+    </div>
+    <div class="list-item">
+      <div class="list-item-left"><span class="list-icon">🍋</span> Sydney</div>
+      <span id="status-Sydney" style="font-size:11px;color:var(--text-muted)">No data</span>
+    </div>
+  </div>
+</main>
+
+<!-- DELIVERY PAY PAGE -->
+<main id="page-delivery" style="display:none">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <button class="btn-secondary" onclick="showPage('home')" style="padding:6px 12px;font-size:12px">← Back</button>
+    <div style="font-size:16px;font-weight:700">🚚 Delivery Pay</div>
+  </div>
+  <div id="delivery-content"></div>
+</main>
+
+<!-- WEEKLY PAGE -->
+<main id="page-weekly" style="display:none">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <button class="btn-secondary" onclick="showPage('home')" style="padding:6px 12px;font-size:12px">← Back</button>
+    <div style="font-size:16px;font-weight:700">⚡ Weekly Summary</div>
+  </div>
+  <div id="weekly-content"></div>
+</main>
+
+<!-- FOOD RELIEF PAGE -->
+<main id="page-foodrelief" style="display:none">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <button class="btn-secondary" onclick="showPage('home')" style="padding:6px 12px;font-size:12px">← Back</button>
+    <div style="font-size:16px;font-weight:700">📦 Food Relief</div>
+  </div>
+  <div id="foodrelief-content"></div>
+</main>
+
+<!-- FUEL PAGE -->
+<main id="page-fuel" style="display:none">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <button class="btn-secondary" onclick="showPage('home')" style="padding:6px 12px;font-size:12px">← Back</button>
+    <div style="font-size:16px;font-weight:700">⛽ Fuel Reimbursement</div>
+  </div>
+  <div id="fuel-content"></div>
+</main>
+
+<!-- INVOICES PAGE -->
+<main id="page-invoices" style="display:none">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <button class="btn-secondary" onclick="showPage('home')" style="padding:6px 12px;font-size:12px">← Back</button>
+    <div style="font-size:16px;font-weight:700">🧾 Invoices</div>
+  </div>
+  <div id="invoices-content"></div>
+</main>
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 const CITY_CFG = {
-  Brisbane:  { cls: 'brisbane',  flag: '', days: ['Tuesday','Wednesday','Thursday','Friday'] },
-  Melbourne: { cls: 'melbourne', flag: '', days: ['Tuesday','Wednesday','Thursday','Friday'] },
-  Sydney:    { cls: 'sydney',    flag: '', days: ['Wednesday','Thursday','Friday','Saturday'] }
+  Brisbane:  { flag:'', days:['Tuesday','Wednesday','Thursday','Friday'] },
+  Melbourne: { flag:'', days:['Tuesday','Wednesday','Thursday','Friday'] },
+  Sydney:    { flag:'', days:['Wednesday','Thursday','Friday','Saturday'] }
 };
 const ALL_DAYS  = ['Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DAY_NUMS  = {Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6};
 const CITIES    = Object.keys(CITY_CFG);
-
 const DAY_CITIES = {};
-ALL_DAYS.forEach(day => { DAY_CITIES[day] = CITIES.filter(c => CITY_CFG[c].days.includes(day)); });
+ALL_DAYS.forEach(day=>{ DAY_CITIES[day]=CITIES.filter(c=>CITY_CFG[c].days.includes(day)); });
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-const state = {};
-ALL_DAYS.forEach(day => {
-  state[day] = {};
-  DAY_CITIES[day].forEach(city => {
-    const today = new Date();
-    const diff  = (today.getDay() - DAY_NUMS[day] + 7) % 7;
-    const d     = new Date(today); d.setDate(today.getDate() - diff);
-    state[day][city] = { drivers:{}, date:d.toISOString().split('T')[0], estLoaded:false, actLoaded:false, _totals:{} };
+const state={};
+ALL_DAYS.forEach(day=>{
+  state[day]={};
+  DAY_CITIES[day].forEach(city=>{
+    const today=new Date(), diff=(today.getDay()-DAY_NUMS[day]+7)%7;
+    const d=new Date(today); d.setDate(today.getDate()-diff);
+    state[day][city]={drivers:{},date:d.toISOString().split('T')[0],estLoaded:false,actLoaded:false,_totals:{}};
   });
 });
 
-let activeTab = 'Tuesday';
-const activeCity = {};
-let activeWeeklyCity = 'Brisbane';
-let activeFRCity = 'Brisbane';
-let activeFuelCity = 'Brisbane';
-let activeInvoiceCity = 'Brisbane';
-let driverDetails = {}; // driverDetails[city][name] = {company,phone,abn,address,email,bsb,account}
-let invoiceSettings = { submittedOn:'', invoiceStart:'040101', dueDate:'' };
-const fuelVehicleType = {}; // fuelVehicleType[city][name] = 'Diesel'|'Petrol'
-const frState = {}; // foodRelief[day][city] = { loaded, fileName, foodData: {driverName: count} }
-// ── NUMBER FORMATTER ─────────────────────────────────────────────────────────
-function fmtNum(v, decimals=2){
-  return v.toLocaleString('en-AU', {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
-}
-function fmtMoney(v, decimals=2){ return '$'+fmtNum(v, decimals); }
+const activeCity={};
+let activeDay='Tuesday';
+let activeWeeklyCity='Brisbane', activeFRCity='Brisbane', activeFuelCity='Brisbane', activeInvCity='Brisbane';
+const frState={};
+const fuelVehicleType={};
+let driverDetails={};
+let invoiceSettings={submittedOn:'',invoiceStart:'040101',dueDate:''};
+const FUEL_RATES={Diesel:{base:1.90,newPrice:3.04,economy:13},Petrol:{base:1.80,newPrice:2.50,economy:16}};
+const REIMBURSE_RATE=0.50;
 
-// ── AU DATE FORMATTER ────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function auDate(d){if(!d)return'—';const p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
-
-// ── AUTO DATE FROM TUESDAY ────────────────────────────────────────────────────
-function setTuesdayDate(city, tuesdayVal){
-  // Set Tuesday for all cities
-  CITIES.forEach(c => { if(state['Tuesday'][c]) state['Tuesday'][c].date = tuesdayVal; });
-  // Auto-fill Wed, Thu, Fri, Sat by adding days from Tuesday
-  const base = new Date(tuesdayVal);
-  const dayOffsets = {Tuesday:0, Wednesday:1, Thursday:2, Friday:3, Saturday:4};
-  ALL_DAYS.forEach(day => {
-    const d = new Date(base);
-    d.setDate(base.getDate() + dayOffsets[day]);
-    const iso = d.toISOString().split('T')[0];
-    CITIES.forEach(c => { if(state[day][c]) state[day][c].date = iso; });
+function fmtNum(v,dec=2){return v.toLocaleString('en-AU',{minimumFractionDigits:dec,maximumFractionDigits:dec});}
+function fmtMoney(v,dec=2){return '$'+fmtNum(v,dec);}
+function tM(t){if(!t)return null;const p=t.split(':');if(p.length<2)return null;return parseInt(p[0])*60+parseInt(p[1]);}
+function mD(t1,t2){const a=tM(t1),b=tM(t2);if(a===null||b===null)return null;return(b-a)/60;}
+function setTuesdayDate(city,val){
+  CITIES.forEach(c=>{if(state['Tuesday'][c])state['Tuesday'][c].date=val;});
+  const base=new Date(val);
+  const off={Tuesday:0,Wednesday:1,Thursday:2,Friday:3,Saturday:4};
+  ALL_DAYS.forEach(day=>{
+    const d=new Date(base); d.setDate(base.getDate()+off[day]);
+    CITIES.forEach(c=>{if(state[day][c])state[day][c].date=d.toISOString().split('T')[0];});
   });
-  buildMain();
+  renderDeliveryPage();
 }
 
-document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-
-// ── TABS ──────────────────────────────────────────────────────────────────────
-function buildTabs() {
-  const bar = document.getElementById('tabsBar');
-  bar.innerHTML = '';
-  ALL_DAYS.forEach(day => {
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn' + (day === activeTab ? ' active' : '');
-    btn.id = 'tab-' + day;
-    btn.onclick = () => switchTab(day);
-    const dots = DAY_CITIES[day].map(c => `<span class="tab-dot ${CITY_CFG[c].cls}${state[day][c].estLoaded?' loaded':''}" id="dot-${day}-${c}"></span>`).join('');
-    btn.innerHTML = `<div class="tab-dots">${dots}</div>${day}`;
-    bar.appendChild(btn);
-  });
-  const w = document.createElement('button');
-  w.className = 'tab-btn weekly-tab' + (activeTab==='Weekly'?' active':'');
-  w.id = 'tab-Weekly'; w.onclick = () => switchTab('Weekly');
-  w.innerHTML = '⚡️&nbsp; Weekly Summary';
-  bar.appendChild(w);
-  const fr = document.createElement('button');
-  fr.className = 'tab-btn weekly-tab' + (activeTab==='FoodRelief'?' active':'');
-  fr.id = 'tab-FoodRelief'; fr.onclick = () => switchTab('FoodRelief');
-  fr.innerHTML = '📦&nbsp; Food Relief';
-  bar.appendChild(fr);
-  const fu = document.createElement('button');
-  fu.className = 'tab-btn weekly-tab' + (activeTab==='Fuel'?' active':'');
-  fu.id = 'tab-Fuel'; fu.onclick = () => switchTab('Fuel');
-  fu.innerHTML = '⛽&nbsp; Fuel';
-  bar.appendChild(fu);
-  const inv = document.createElement('button');
-  inv.className = 'tab-btn weekly-tab' + (activeTab==='Invoice'?' active':'');
-  inv.id = 'tab-Invoice'; inv.onclick = () => switchTab('Invoice');
-  inv.innerHTML = '🧾&nbsp; Invoices';
-  bar.appendChild(inv);
+// ── PAGE ROUTING ──────────────────────────────────────────────────────────────
+function showPage(page){
+  document.querySelectorAll('main').forEach(m=>m.style.display='none');
+  document.getElementById('page-'+page).style.display='block';
+  document.querySelectorAll('.nav-pill').forEach(b=>b.classList.remove('active'));
+  if(page==='home') document.querySelector('.nav-pill').classList.add('active');
+  else document.querySelectorAll('.nav-pill')[1].classList.add('active');
+  if(page==='delivery') renderDeliveryPage();
+  if(page==='weekly') renderWeeklyPage();
+  if(page==='foodrelief') renderFoodReliefPage();
+  if(page==='fuel') renderFuelPage();
+  if(page==='invoices') renderInvoicesPage();
+  updateHomeStatus();
 }
 
-function updateDot(day, city) {
-  const dot = document.getElementById(`dot-${day}-${city}`);
-  if (!dot) return;
-  dot.className = `tab-dot ${CITY_CFG[city].cls}${state[day][city].estLoaded?' loaded':''}`;
-}
-
-function switchTab(tab) { activeTab = tab; buildTabs(); buildMain(); }
-
-// ── MAIN ──────────────────────────────────────────────────────────────────────
-function buildMain() {
-  const main = document.getElementById('mainContent');
-  if (activeTab === 'Weekly') { main.innerHTML = ''; renderWeekly(); return; }
-  if (activeTab === 'FoodRelief') { main.innerHTML = ''; renderFoodRelief(); return; }
-  if (activeTab === 'Fuel') { main.innerHTML = ''; renderFuel(); return; }
-  if (activeTab === 'Invoice') { main.innerHTML = ''; renderInvoice(); return; }
-  const day = activeTab;
-  const cities = DAY_CITIES[day];
-
-  // default to first city if not set
-  if (!activeCity[day]) activeCity[day] = cities[0];
-  const city = activeCity[day];
-
-  main.innerHTML = '';
-
-  // ── City sub-tabs ──
-  const subTabsEl = document.createElement('div');
-  subTabsEl.className = 'city-subtabs';
-  cities.forEach(c => {
-    const s = state[day][c];
-    const cfg = CITY_CFG[c];
-    const btn = document.createElement('button');
-    btn.className = 'city-subtab' + (c === city ? ' active' : '');
-    const statusIcon = s.actLoaded ? '✅' : s.estLoaded ? '📋' : '';
-    btn.innerHTML = `${c} <span class="subtab-status">${statusIcon}</span>`;
-    btn.onclick = () => { activeCity[day] = c; buildMain(); };
-    subTabsEl.appendChild(btn);
-  });
-  main.appendChild(subTabsEl);
-
-  // ── Active city section ──
-  const s   = state[day][city];
-  const cfg = CITY_CFG[city];
-  const sec = document.createElement('div');
-  sec.className = 'city-section';
-  sec.id = `sec-${day}-${city}`;
-  const totalStops = Object.values(s.drivers).reduce((a,d)=>a+d.stops,0);
-  sec.innerHTML = `
-    <div class="city-header ${cfg.cls}">
-      <div class="city-title">
-        ${city}
-        ${s.estLoaded ? `<span class="city-pill">${Object.keys(s.drivers).length} drivers · ${totalStops} stops</span>` : ''}
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <span class="city-status">${s.actLoaded?'✅ Complete':s.estLoaded?'📋 Est loaded':''}</span>
-      </div>
-    </div>
-    <div class="city-body" id="body-${day}-${city}">${buildCityBody(day, city)}</div>`;
-  main.appendChild(sec);
-  setupDrop(day, city);
-}
-
-// ── CITY BODY ─────────────────────────────────────────────────────────────────
-function buildCityBody(day, city) {
-  const s   = state[day][city];
-  const key = `${day}-${city}`;
-  const cfg = CITY_CFG[city];
-  return `
-    <div class="upload-pair">
-      <div class="upload-card${s.estLoaded?' done':''}" id="upEst-${key}" onclick="document.getElementById('fEst-${key}').click()">
-        <div class="upload-icon">📋</div>
-        <h3>1. Upload Estimated CSV</h3>
-        <p>Routific plan — before deliveries</p>
-        <input type="file" id="fEst-${key}" accept=".csv" onchange="onEst('${day}','${city}',event)">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fEst-${key}').click()">Choose Estimated CSV</button>
-        <div class="file-name" id="nEst-${key}">${s.estLoaded?'✓ '+s._estFile:''}</div>
-      </div>
-      <div class="upload-card${s.actLoaded?' done':s.estLoaded?'':' locked'}" id="upAct-${key}" onclick="document.getElementById('fAct-${key}').click()">
-        <div class="upload-icon">✅</div>
-        <h3>2. Upload Actuals CSV</h3>
-        <p>Completed run — after deliveries</p>
-        <input type="file" id="fAct-${key}" accept=".csv" onchange="onAct('${day}','${city}',event)">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fAct-${key}').click()">Choose Actuals CSV</button>
-        <div class="file-name" id="nAct-${key}">${s.actLoaded?'✓ '+s._actFile:''}</div>
-      </div>
-    </div>
-    <div class="config-row">
-      <div class="config-card">
-        <label>Delivery Date${day==='Tuesday'?' ✎':' (auto)'}</label>
-        ${day==='Tuesday'
-          ? `<input type="date" id="dt-${key}" value="${s.date}" onchange="setTuesdayDate('${city}',this.value)">`
-          : `<div class="val" style="font-family:'DM Mono',monospace;font-size:13px">${auDate(s.date)}</div>`
-        }
-      </div>
-      <div class="config-card"><label>Rate / hr ($)</label><input type="number" id="rate-${key}" value="${s._rate||62}" step="0.01" oninput="s['${day}']['${city}']._rate=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
-      <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
-    </div>
-    <div id="driverArea-${key}">
-      ${s.estLoaded ? buildDriverCards(day,city) : `<div class="empty-state"><div class="emoji">🌱</div><p>Upload Estimated CSV to get started</p><small>Then upload Actuals CSV to auto-fill times</small></div>`}
-    </div>
-    ${s.estLoaded ? buildCitySummary(day,city) : ''}
-    ${s.estLoaded ? `
-    <div class="actions-row">
-      <button class="export-btn" onclick="exportCity('${day}','${city}')">⬇ Export ${city} CSV</button>
-      <button class="clear-btn" onclick="clearCity('${day}','${city}')">✕ Clear ${city}</button>
-    </div>` : ''}`;
-}
-
-// ── DROP ZONES ────────────────────────────────────────────────────────────────
-function setupDrop(day, city) {
-  const key = `${day}-${city}`;
-  ['Est','Act'].forEach(t => {
-    const z = document.getElementById(`up${t}-${key}`); if (!z) return;
-    z.addEventListener('dragover', e=>{e.preventDefault();z.classList.add('drag-over');});
-    z.addEventListener('dragleave', ()=>z.classList.remove('drag-over'));
-    z.addEventListener('drop', e=>{
-      e.preventDefault(); z.classList.remove('drag-over');
-      const f=e.dataTransfer.files[0];
-      if(f&&f.name.endsWith('.csv')) t==='Est'?loadEst(day,city,f):loadAct(day,city,f);
-    });
+function updateHomeStatus(){
+  CITIES.forEach(city=>{
+    const el=document.getElementById('status-'+city);
+    if(!el) return;
+    const days=ALL_DAYS.filter(d=>DAY_CITIES[d].includes(city));
+    const loaded=days.filter(d=>state[d][city].estLoaded).length;
+    const complete=days.filter(d=>state[d][city].actLoaded).length;
+    if(complete>0) el.textContent=`✅ ${complete}/${days.length} days complete`;
+    else if(loaded>0) el.textContent=`📋 ${loaded}/${days.length} days loaded`;
+    else el.textContent='No data';
+    el.style.color=complete>0?'#569556':loaded>0?'#e07a2f':'#8a8a8a';
   });
 }
 
 // ── CSV PARSER ────────────────────────────────────────────────────────────────
-function parseCSV(text) {
+function parseCSV(text){
   const rows=[]; let cur='',inQ=false,row=[];
   for(let i=0;i<text.length;i++){
     const ch=text[i];
@@ -486,9 +441,6 @@ function parseCSV(text) {
 }
 
 // ── LOAD EST ──────────────────────────────────────────────────────────────────
-function onEst(day,city,e){const f=e.target.files[0];if(f)loadEst(day,city,f);}
-function onAct(day,city,e){const f=e.target.files[0];if(f)loadAct(day,city,f);}
-
 function loadEst(day,city,file){
   const reader=new FileReader();
   reader.onload=e=>{
@@ -502,14 +454,13 @@ function loadEst(day,city,file){
       const d=drivers[name];
       if(stop===0){d.depotStart=startAt;continue;}
       if(stop===999){d.depotEnd=startAt;continue;}
-      d.totalKm+=km;
-      d.stops++;
+      d.totalKm+=km; d.stops++;
     }
     Object.keys(drivers).forEach(n=>{if(!drivers[n].depotStart)delete drivers[n];});
-    const s=state[day][city];
-    s.drivers=drivers; s.estLoaded=true; s._estFile=file.name;
-    updateDot(day,city); buildMain();
-    setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); }, 50);
+    state[day][city].drivers=drivers; state[day][city].estLoaded=true; state[day][city]._estFile=file.name;
+    renderDeliveryPage();
+    setTimeout(()=>{for(const n in state[day][city].drivers)compute(day,city,n);},50);
+    updateHomeStatus();
   };
   reader.readAsText(file);
 }
@@ -530,29 +481,28 @@ function loadAct(day,city,file){
       const types=r[idx('Types')]||'';
       if(types.toUpperCase().includes('FOOD'))d.foodBoxes++;
       const t=finishBy||startAt;
-      if(t){if(!d.firstStop)d.firstStop=t; d.lastStop=t;}
+      if(t){if(!d.firstStop)d.firstStop=t;d.lastStop=t;}
     }
     const key=`${day}-${city}`;
     for(const name in act){
       if(!state[day][city].drivers[name])continue;
       const a=act[name],dc=state[day][city].drivers[name]._c;
       dc._actFirst=a.firstStop?a.firstStop.substring(0,5):'';
-      dc._actLast =a.lastStop ?a.lastStop.substring(0,5):'';
+      dc._actLast=a.lastStop?a.lastStop.substring(0,5):'';
       if(a.actBoxes>0)dc.actBoxes=a.actBoxes;
       dc.foodBoxes=a.foodBoxes||0;
     }
     state[day][city].actLoaded=true; state[day][city]._actFile=file.name;
-    updateDot(day,city); buildMain();
+    renderDeliveryPage();
     setTimeout(()=>{
-      const k=`${day}-${city}`;
       for(const name in state[day][city].drivers){
         const dc=state[day][city].drivers[name]._c||{};
-        const fd=document.getElementById(`${k}_${name}_actFirst_display`);
-        const ld=document.getElementById(`${k}_${name}_actLast_display`);
-        const bd=document.getElementById(`${k}_${name}_actBoxes_display`);
-        const fh=document.getElementById(`${k}_${name}_actFirst`);
-        const lh=document.getElementById(`${k}_${name}_actLast`);
-        const bh=document.getElementById(`${k}_${name}_actBoxes`);
+        const fd=document.getElementById(`${key}_${name}_actFirst_display`);
+        const ld=document.getElementById(`${key}_${name}_actLast_display`);
+        const bd=document.getElementById(`${key}_${name}_actBoxes_display`);
+        const fh=document.getElementById(`${key}_${name}_actFirst`);
+        const lh=document.getElementById(`${key}_${name}_actLast`);
+        const bh=document.getElementById(`${key}_${name}_actBoxes`);
         if(fd&&dc._actFirst)fd.textContent=dc._actFirst;
         if(ld&&dc._actLast)ld.textContent=dc._actLast;
         if(bd&&dc.actBoxes)bd.textContent=dc.actBoxes;
@@ -562,1240 +512,653 @@ function loadAct(day,city,file){
         compute(day,city,name);
       }
     },50);
+    updateHomeStatus();
   };
   reader.readAsText(file);
 }
-
-// ── DRIVER CARDS ──────────────────────────────────────────────────────────────
-function buildDriverCards(day,city){
-  const key=`${day}-${city}`;
-  let html=`<div class="section-title">Drivers — ${city}</div><div class="drivers-grid">`;
-  for(const name in state[day][city].drivers){
-    const d=state[day][city].drivers[name];
-    const c=d._c||{};
-    const estHrs=tM(d.depotEnd)!==null&&tM(d.depotStart)!==null?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
-    html+=`<div class="driver-card">
-      <div class="driver-header">
-        <div class="driver-name">${name}</div>
-        <div class="driver-stops">${d.stops} stops · ~${Math.round(d.totalKm)} km</div>
-      </div>
-      <div class="driver-body">
-        <div class="fields-grid">
-          <div class="field-group"><label>Est # Boxes</label><div class="val">${d.stops}</div></div>
-          <div class="field-group"><label># Adjustment ✎</label><input type="number" class="tag-input" id="${key}_${name}_adj" value="${c.adj||0}" oninput="compute('${day}','${city}','${name}')"></div>
-          <div class="field-group"><label>Act # Boxes</label><div class="val" id="${key}_${name}_actBoxes_display">${c.actBoxes||d.stops}</div><input type="hidden" id="${key}_${name}_actBoxes" value="${c.actBoxes||d.stops}"></div>
-          <div class="field-group"><label>Run Start (Stop 0)</label><div class="val">${d.depotStart||'—'}</div></div>
-          <div class="field-group"><label>Run End (Stop 999)</label><div class="val">${d.depotEnd||'—'}</div></div>
-          <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
-          <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
-          <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
-          <div class="field-group"><label>Bonus & Fines ($) ✎</label><input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')"></div>
-        </div>
-        <div class="results-strip">
-          <div class="result-item"><div class="r-label">Est Pay</div><div class="r-val" id="${key}_${name}_estPay">${c.estPay?'$'+c.estPay.toFixed(2):'—'}</div></div>
-          <div class="result-item"><div class="r-label">Est Per Box</div><div class="r-val" id="${key}_${name}_estPerBox">${c.estPerBox?'$'+c.estPerBox.toFixed(2):'—'}</div></div>
-          <div class="result-item"><div class="r-label">Final Per Box</div><div class="r-val" id="${key}_${name}_finalPerBox">${c.finalPerBox?'$'+c.finalPerBox.toFixed(2):'—'}</div></div>
-          <div class="result-item"><div class="r-label">Final Hourly</div><div class="r-val" id="${key}_${name}_finalHourly">${c.finalHourly?'$'+c.finalHourly.toFixed(2):'—'}</div></div>
-          <div class="result-item"><div class="r-label">Final Pay</div><div class="r-val" id="${key}_${name}_finalPay">${c.finalPay?'$'+c.finalPay.toFixed(2):'—'}</div></div>
-          <div class="result-item"><div class="r-label">Driver Speed</div><div class="r-val" id="${key}_${name}_speed">${c.speed!=null?Math.round(c.speed)+'%':'—'}</div></div>
-          <div class="result-item"><div class="r-label">6PM Finish</div><div class="r-val" id="${key}_${name}_6pm">${c.sixPM||'—'}</div></div>
-          <div class="result-item"><div class="r-label">Time Taken</div><div class="r-val" id="${key}_${name}_timeTaken">${c.timeTaken?c.timeTaken.toFixed(2)+'h':'—'}</div></div>
-        </div>
-      </div>
-    </div>`;
-  }
-  return html+'</div>';
-}
-
-// ── CITY SUMMARY ──────────────────────────────────────────────────────────────
-function buildCitySummary(day,city){
-  const cfg=CITY_CFG[city], drivers=state[day][city].drivers;
-  let totB=0,totE=0,totF=0, rows='';
-  for(const name in drivers){
-    const c=drivers[name]._c||{}, boxes=c.actBoxes||drivers[name].stops;
-    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=c.bonus||0;
-    totB+=boxes;totE+=ep;totF+=fp;
-    const speed = c.speed!=null?Math.round(c.speed)+'%':'—';
-    const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b;font-weight:700' : 'color:#569556;font-weight:700';
-    const sixPM = c.sixPM||'—';
-    const sixPMStyle = sixPM.includes('Okay') ? 'color:#569556;font-weight:700' : sixPM==='—' ? '' : (()=>{
-      const parts=sixPM.match(/\+(\d+):(\d+)/);
-      if(!parts)return 'color:#5a5a5a';
-      const ov=parseInt(parts[1])*60+parseInt(parts[2]);
-      return ov>=30?'color:#c0392b;font-weight:700':'color:#5a5a5a;font-weight:700';
-    })();
-    rows+=`<tr id="srow-${day}-${city}-${name}"><td>${name}</td><td>${boxes}</td><td>${fmtMoney(ep)}</td><td>${fmtMoney(fpb)}</td><td>${bonus?'$'+bonus.toFixed(2):'—'}</td><td><strong>${fmtMoney(fp)}</strong></td><td style="${speedStyle}">${speed}</td><td style="${sixPMStyle}">${sixPM}</td></tr>`;
-  }
-  state[day][city]._totals={boxes:totB,est:totE,final:totF};
-  return `<div class="city-summary">
-    <div class="cs-head ${cfg.cls}">${city} Summary — ${auDate(state[day][city].date)}</div>
-    <table class="cs-table">
-      <thead><tr><th>Driver</th><th>Boxes</th><th>Est Pay</th><th>Final/Box</th><th>Bonus/Fines</th><th>Final Pay</th><th>Speed</th><th>6PM</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td>TOTAL</td><td>${totB}</td><td>${fmtMoney(totE)}</td><td>—</td><td>—</td><td>${fmtMoney(totF)}</td><td>—</td><td>—</td></tr></tfoot>
-    </table>
-  </div>`;
-}
-
-function refreshMain(){ if(activeTab!=='Weekly') buildMain(); }
-
-// ── TIME HELPERS ──────────────────────────────────────────────────────────────
-function tM(t){if(!t)return null;const p=t.split(':');if(p.length<2)return null;return parseInt(p[0])*60+parseInt(p[1]);}
-function mD(t1,t2){const a=tM(t1),b=tM(t2);if(a===null||b===null)return null;return(b-a)/60;}
 
 // ── COMPUTE ───────────────────────────────────────────────────────────────────
 function compute(day,city,name){
   const d=state[day][city].drivers[name]; if(!d)return;
   const key=`${day}-${city}`;
   const s=state[day][city];
-  const rate  = parseFloat(document.getElementById('rate-'+key)?.value)  || s._rate  || 62;
-  const pbMin = parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5;
-  const estBoxes = d.stops;
-  const adj      = parseFloat(document.getElementById(`${key}_${name}_adj`)?.value)||0;
-  const actBoxes = parseFloat(document.getElementById(`${key}_${name}_actBoxes`)?.value)||estBoxes;
-  const bonus    = parseFloat(document.getElementById(`${key}_${name}_bonus`)?.value)||0;
-  const actFirst = document.getElementById(`${key}_${name}_actFirst`)?.value||'';
-  const actLast  = document.getElementById(`${key}_${name}_actLast`)?.value||'';
-
-  const estHrs    = mD(d.depotStart,d.depotEnd)||0;
-  const estPay    = rate*estHrs;
-  const estPerBox = estBoxes>0?Math.round((estPay/estBoxes)*10)/10:0;
-  let finalPerBox = Math.round((estPerBox<pbMin?pbMin:estPerBox)*10)/10;
-  const actHrs    = actFirst&&actLast?mD(actFirst,actLast):null;
-  const timeTaken = estBoxes>0?Math.round((estHrs*60/estBoxes)*10)/10:0;
-
-  // ── FIXED BONUS RULES ────────────────────────────────────────────────────────
-  let fixedBonus = 0;
-  // Rule 1: Lakmal / Brisbane / Friday → +$125
-  if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
-  // Rule 2: Angus / Brisbane / Friday → Final Per Box forced to $8.00
-  if(name==='Angus' && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
-  // Rule 3: Dasharath / Melbourne / Friday → +$50
-  if(name==='Dasharath' && city==='Melbourne' && day==='Friday') fixedBonus += 50;
-  // Rule 4: All Sydney drivers / Every day → +$12 market gate fee
-  if(city==='Sydney') fixedBonus += 12;
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const foodBoxes   = d._c.foodBoxes||0;
-  const foodRate    = 5.50;
-  const foodDeduction = foodBoxes>0 ? (finalPerBox - foodRate) * foodBoxes * -1 : 0;
-  const finalPay    = finalPerBox*actBoxes+(bonus+fixedBonus)+(adj*finalPerBox)+foodDeduction;
-  const finalHourly = estHrs>0?finalPay/estHrs:0;
-  // Speed = (Est Last Stop - Est First Stop) / (Act Last Stop - Act First Stop)
-  const estFirstTime = d.depotStart||'';
-  const estLastTime  = d.depotEnd||'';
-  const estWindow = estFirstTime&&estLastTime ? mD(estFirstTime,estLastTime) : null;
-  const actWindow = actFirst&&actLast ? mD(actFirst,actLast) : null;
+  const rate=parseFloat(document.getElementById('rate-'+key)?.value)||s._rate||62;
+  const pbMin=parseFloat(document.getElementById('pbmin-'+key)?.value)||s._pbmin||5;
+  const estBoxes=d.stops;
+  const adj=parseFloat(document.getElementById(`${key}_${name}_adj`)?.value)||0;
+  const actBoxes=parseFloat(document.getElementById(`${key}_${name}_actBoxes`)?.value)||estBoxes;
+  const bonus=parseFloat(document.getElementById(`${key}_${name}_bonus`)?.value)||0;
+  const actFirst=document.getElementById(`${key}_${name}_actFirst`)?.value||'';
+  const actLast=document.getElementById(`${key}_${name}_actLast`)?.value||'';
+  const estHrs=mD(d.depotStart,d.depotEnd)||0;
+  const estPay=rate*estHrs;
+  const estPerBox=estBoxes>0?Math.round((estPay/estBoxes)*10)/10:0;
+  let finalPerBox=Math.round((estPerBox<pbMin?pbMin:estPerBox)*10)/10;
+  const actHrs=actFirst&&actLast?mD(actFirst,actLast):null;
+  const timeTaken=estBoxes>0?Math.round((estHrs*60/estBoxes)*10)/10:0;
+  // Fixed bonus rules
+  let fixedBonus=0;
+  if(name==='Lakmal'&&city==='Brisbane'&&day==='Friday')fixedBonus+=125;
+  if(name==='Angus'&&city==='Brisbane'&&day==='Friday')finalPerBox=8.0;
+  if(name==='Dasharath'&&city==='Melbourne'&&day==='Friday')fixedBonus+=50;
+  if(city==='Sydney')fixedBonus+=12;
+  const foodBoxes=d._c.foodBoxes||0;
+  const foodDeduction=foodBoxes>0?(finalPerBox-5.50)*foodBoxes*-1:0;
+  const finalPay=finalPerBox*actBoxes+(bonus+fixedBonus)+(adj*finalPerBox)+foodDeduction;
+  const finalHourly=estHrs>0?finalPay/estHrs:0;
+  const estWindow=d.depotStart&&d.depotEnd?mD(d.depotStart,d.depotEnd):null;
+  const actWindow=actFirst&&actLast?mD(actFirst,actLast):null;
   let speed=null;
   if(estWindow!==null&&actWindow!==null&&actWindow>0)speed=(estWindow/actWindow)*100;
   let sixPM='—';
   if(actLast){const m=tM(actLast);if(m<=1110)sixPM='Okay ✓';else{const ov=m-1110;sixPM=`+${Math.floor(ov/60)}:${String(ov%60).padStart(2,'0')} late`;}}
-
-  const fmt=v=>'$'+v.toFixed(2),pct=v=>Math.round(v)+'%';
+  const sixPMClass=sixPM.includes('Okay')?'ok':sixPM==='—'?'':(()=>{const p=sixPM.match(/\+(\d+):(\d+)/);if(!p)return'warn';return(parseInt(p[1])*60+parseInt(p[2]))>=30?'bad':'warn';})();
+  const fmt=v=>fmtMoney(v),pct=v=>Math.round(v)+'%';
+  const sR=(id,val,cls)=>{const el=document.getElementById(id);if(!el)return;el.textContent=val;el.className='r-val'+(cls?' '+cls:'');};
   sR(`${key}_${name}_estPay`,fmt(estPay));
-  sR(`${key}_${name}_estPerBox`,fmt(estPerBox));
-  sR(`${key}_${name}_finalPerBox`,fmt(finalPerBox),finalPerBox<=pbMin?'warn':'ok');
+  sR(`${key}_${name}_estPerBox`,fmtMoney(estPerBox,1));
+  sR(`${key}_${name}_finalPerBox`,fmtMoney(finalPerBox,1),finalPerBox<=pbMin?'warn':'ok');
   sR(`${key}_${name}_finalHourly`,fmt(finalHourly));
   sR(`${key}_${name}_finalPay`,fmt(finalPay),'ok');
-  sR(`${key}_${name}_timeTaken`,timeTaken>0?timeTaken.toFixed(1)+' min':'—');
+  sR(`${key}_${name}_timeTaken`,timeTaken>0?fmtNum(timeTaken,1)+' min':'—');
   if(speed!==null)sR(`${key}_${name}_speed`,pct(speed),speed>=90?'ok':'bad');
-  const sixPMClass = sixPM.includes('Okay') ? 'ok' : sixPM === '—' ? '' : (() => {
-    const parts = sixPM.match(/\+(\d+):(\d+)/);
-    if (!parts) return 'warn';
-    const overMins = parseInt(parts[1])*60 + parseInt(parts[2]);
-    return overMins >= 30 ? 'bad' : 'warn';
-  })();
-  sR(`${key}_${name}_6pm`, sixPM, sixPMClass);
-
+  sR(`${key}_${name}_6pm`,sixPM,sixPMClass);
   d._c={...d._c,actBoxes,estPay,estPerBox,finalPerBox,bonus,adj,finalPay,speed,sixPM,finalHourly,timeTaken,_actFirst:actFirst,_actLast:actLast,foodBoxes,foodDeduction};
-
-  // update totals
   let tB=0,tE=0,tF=0;
-  for(const n in state[day][city].drivers){
-    const c=state[day][city].drivers[n]._c||{};
-    tB+=(c.actBoxes||state[day][city].drivers[n].stops);tE+=(c.estPay||0);tF+=(c.finalPay||0);
-  }
+  for(const n in state[day][city].drivers){const cv=state[day][city].drivers[n]._c||{};tB+=(cv.actBoxes||state[day][city].drivers[n].stops);tE+=(cv.estPay||0);tF+=(cv.finalPay||0);}
   state[day][city]._totals={boxes:tB,est:tE,final:tF};
-
-  // live-update summary row
+  // update summary row
   const srow=document.getElementById(`srow-${day}-${city}-${name}`);
   if(srow){
     const spd=speed!=null?Math.round(speed)+'%':'—';
-    const spdStyle=speed!=null&&speed<90?'color:#c0392b;font-weight:700':'color:#569556;font-weight:700';
-    const sixStyle=sixPM.includes('Okay')?'color:#569556;font-weight:700':sixPM==='—'?'':(()=>{
-      const parts=sixPM.match(/\+(\d+):(\d+)/);
-      if(!parts)return 'color:#5a5a5a';
-      const ov=parseInt(parts[1])*60+parseInt(parts[2]);
-      return ov>=30?'color:#c0392b;font-weight:700':'color:#5a5a5a;font-weight:700';
-    })();
-    srow.innerHTML=`
-      <td>${name}</td>
-      <td>${actBoxes}</td>
-      <td>${fmtMoney(estPay)}</td>
-      <td>${fmtMoney(finalPerBox)}</td>
-      <td>${bonus?'$'+bonus.toFixed(2):'—'}</td>
-      <td><strong>${fmtMoney(finalPay)}</strong></td>
-      <td style="${spdStyle}">${spd}</td>
-      <td style="${sixStyle}">${sixPM}</td>`;
+    const spdSt=speed!=null&&speed<90?'color:var(--red);font-weight:700':'color:var(--accent);font-weight:700';
+    const sixSt=sixPM.includes('Okay')?'color:var(--accent);font-weight:700':sixPM==='—'?'':(()=>{const p=sixPM.match(/\+(\d+):(\d+)/);if(!p)return'';return(parseInt(p[1])*60+parseInt(p[2]))>=30?'color:var(--red);font-weight:700':'color:#e07a2f;font-weight:700';})();
+    srow.innerHTML=`<td>${name}</td><td>${actBoxes}</td><td>${fmtMoney(estPay)}</td><td>${fmtMoney(finalPerBox,1)}</td><td>${bonus?fmtMoney(bonus):'—'}</td><td><strong>${fmtMoney(finalPay)}</strong></td><td style="${spdSt}">${spd}</td><td style="${sixSt}">${sixPM}</td>`;
   }
 }
-
-function sR(id,val,cls){const el=document.getElementById(id);if(!el)return;el.textContent=val;el.className='r-val'+(cls?' '+cls:'');}
 function recomputeAll(day,city){for(const n in state[day][city].drivers)compute(day,city,n);}
 
-// ── WEEKLY ────────────────────────────────────────────────────────────────────
-function renderWeekly(){
-  const main=document.getElementById('mainContent');
-  const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
-  if(!hasAny){main.innerHTML=`<div class="empty-state"><div class="emoji">🌱</div><p>No data loaded yet</p><small>Upload CSVs for each delivery day and city first</small></div>`;return;}
-
-  const subHtml=`<div class="city-subtabs">`+CITIES.map(city=>{
-    const cfg=CITY_CFG[city];
-    const has=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);
-    return `<button class="city-subtab${city===activeWeeklyCity?' active':''}" onclick="activeWeeklyCity='${city}';renderWeekly()">`+
-      `${city}`+
-      (has?` <span class="subtab-status">📋</span>`:'')+
-      `</button>`;
-  }).join('')+`</div>`;
-  main.innerHTML=subHtml;
-
-  // columns matching the spreadsheet
-  const COLS = [
-    {label:'Driver',       w:'120px'},
-    {label:'Rate/hr',      w:'70px'},
-    {label:'Est # Boxes',  w:'80px'},
-    {label:'# Adj',        w:'55px'},
-    {label:'Act # Boxes',  w:'80px'},
-    {label:'Est First Stop',w:'90px'},
-    {label:'Est Last Stop', w:'90px'},
-    {label:'Est Time (hrs)',w:'90px'},
-    {label:'Act First Stop',w:'90px'},
-    {label:'Act Last Stop', w:'90px'},
-    {label:'Bonus & Fines', w:'90px'},
-    {label:'Est Pay',       w:'80px'},
-    {label:'Est Per Box',   w:'80px'},
-    {label:'Final Per Box', w:'80px'},
-    {label:'6PM Finish',    w:'80px'},
-    {label:'Driver Speed',  w:'85px'},
-    {label:'Final Hourly',  w:'85px'},
-    {label:'Final Pay',     w:'85px'},
-  ];
-
-  const thead = `<thead><tr>${COLS.map(col=>`<th style="min-width:${col.w}">${col.label}</th>`).join('')}</tr></thead>`;
-
-  function sixPMclass(val){
-    if(!val||val==='—')return '';
-    if(val.includes('Okay'))return 'style="color:#569556;font-weight:700"';
-    return 'style="color:#c0392b;font-weight:700"';
-  }
-  function speedClass(val){
-    if(!val||val==='—')return '';
-    const n=parseInt(val);
-    if(n>=90)return 'style="background:var(--olive-pale);color:#569556;font-weight:700;border-radius:4px;padding:2px 5px"';
-    return 'style="color:#c0392b;font-weight:700"';
-  }
-
-  let html='', grandB=0, grandF=0;
-  const driverW={};
-
-  ALL_DAYS.forEach(day=>{
-    const active=DAY_CITIES[day].filter(city=>state[day][city].estLoaded&&city===activeWeeklyCity);
-    if(!active.length)return;
-
-    active.forEach(city=>{
-      const s=state[day][city], cfg=CITY_CFG[city], drivers=s.drivers;
-      const date=s.date||'';
-      const rate=s._rate||62;
-      let totBoxes=0,totEst=0,totFinal=0, rows='';
-
-      for(const name in drivers){
-        const d=drivers[name], cv=d._c||{};
-        const estBoxes=d.stops;
-        const adj=cv.adj||0;
-        const actBoxes=cv.actBoxes||estBoxes;
-        const estFirst=d.depotStart||'—';
-        const estLast=d.depotEnd||'—';
-        const estHrs=d.depotStart&&d.depotEnd?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
-        const actFirst=cv._actFirst||'—';
-        const actLast=cv._actLast||'—';
-        const bonus=cv.bonus||0;
-        const estPay=cv.estPay||0;
-        const estPerBox=cv.estPerBox||0;
-        const finalPerBox=cv.finalPerBox||0;
-        const sixPM=cv.sixPM||'—';
-        const speed=cv.speed!=null?Math.round(cv.speed)+'%':'—';
-        const finalHourly=cv.finalHourly||0;
-        const finalPay=cv.finalPay||0;
-        totBoxes+=actBoxes; totEst+=estPay; totFinal+=finalPay;
-
-        rows+=`<tr>
-          <td style="font-weight:700;font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
-          <td>${fmtMoney(rate)}</td>
-          <td>${estBoxes}</td>
-          <td>${adj||'—'}</td>
-          <td>${actBoxes}</td>
-          <td>${estFirst}</td>
-          <td>${estLast}</td>
-          <td>${estHrs}</td>
-          <td>${actFirst}</td>
-          <td>${actLast}</td>
-          <td>${bonus?'$'+bonus.toFixed(2):'—'}</td>
-          <td>${fmtMoney(estPay)}</td>
-          <td>${fmtMoney(estPerBox)}</td>
-          <td>${fmtMoney(finalPerBox)}</td>
-          <td ${sixPMclass(sixPM)}>${sixPM}</td>
-          <td><span ${speedClass(speed)}>${speed}</span></td>
-          <td>${fmtMoney(finalHourly)}</td>
-          <td style="font-weight:700">${fmtMoney(finalPay)}</td>
-        </tr>`;
-
-        // weekly driver totals
-        const wk=name+'||'+city;
-        if(!driverW[wk])driverW[wk]={name,city,boxes:0,finalPay:0,days:0};
-        driverW[wk].boxes+=actBoxes; driverW[wk].finalPay+=finalPay; driverW[wk].days++;
-      }
-
-      grandB+=totBoxes; grandF+=totFinal;
-      state[day][city]._totals={boxes:totBoxes,est:totEst,final:totFinal};
-
-      html+=`<div class="weekly-day-block" style="overflow-x:auto;margin-bottom:20px">
-        <div class="weekly-day-header">
-          <div style="display:flex;align-items:center;gap:10px">
-            
-            <div>
-              <h3>${city} — ${day}</h3>
-              <div class="day-meta" style="margin-top:2px">${auDate(date)}</div>
-            </div>
-          </div>
-          <div class="day-meta">${totBoxes} boxes &nbsp;·&nbsp; Total Pay: <strong>${fmtMoney(totFinal)}</strong></div>
-        </div>
-        <table class="wi-table" style="min-width:1100px">
-          ${thead}
-          <tbody>${rows}</tbody>
-          <tfoot>
-            <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
-              <td style="font-family:'Sora',sans-serif">TOTAL</td>
-              <td>—</td><td>—</td><td>—</td>
-              <td>${totBoxes}</td>
-              <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
-              <td>${fmtMoney(totEst)}</td>
-              <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
-              <td>${fmtMoney(totFinal)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>`;
-    });
+// ── RENDER DELIVERY PAGE ──────────────────────────────────────────────────────
+function renderDeliveryPage(){
+  const cont=document.getElementById('delivery-content');
+  if(!cont)return;
+  const day=activeDay;
+  if(!activeCity[day])activeCity[day]=DAY_CITIES[day][0];
+  const city=activeCity[day];
+  // Day tabs
+  let html=`<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">`;
+  ALL_DAYS.forEach(d=>{
+    const dots=DAY_CITIES[d].map(c=>`<span style="width:6px;height:6px;border-radius:50%;background:${state[d][c].actLoaded?'#569556':state[d][c].estLoaded?'#e07a2f':'#ddd'};display:inline-block"></span>`).join('');
+    html+=`<button class="city-tab${d===day?' active':''}" onclick="activeDay='${d}';renderDeliveryPage()">${dots} ${d}</button>`;
   });
-
-  // Grand totals card
-  html+=`<div class="weekly-grand">
-    <h3>Weekly Grand Total</h3>
-    <div class="grand-grid">
-      <div class="grand-item"><div class="grand-label">Total Boxes</div><div class="grand-val">${grandB}</div></div>
-      <div class="grand-item"><div class="grand-label">Total Driver Pay</div><div class="grand-val">${fmtMoney(grandF)}</div></div>
-      <div class="grand-item"><div class="grand-label">Avg $ / Box</div><div class="grand-val">${grandB>0?'$'+(grandF/grandB).toFixed(2):'—'}</div></div>
+  html+=`</div>`;
+  // City tabs
+  html+=`<div class="city-tabs">`;
+  DAY_CITIES[day].forEach(c=>{
+    const s=state[day][c];
+    html+=`<button class="city-tab${c===city?' active':''}" onclick="activeCity['${day}']='${c}';renderDeliveryPage()">${CITY_CFG[c].flag} ${c} ${s.actLoaded?'✅':s.estLoaded?'📋':''}</button>`;
+  });
+  html+=`</div>`;
+  const s=state[day][city];
+  const key=`${day}-${city}`;
+  // Upload
+  html+=`<div class="city-section"><div class="city-section-header">
+    <div class="city-section-title">${CITY_CFG[city].flag} ${city} — ${day}<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px">${auDate(s.date)}</span></div>
+    <div class="city-section-meta">${s.actLoaded?'✅ Complete':s.estLoaded?'📋 Est loaded':''}</div>
+  </div><div class="city-section-body">
+  <div class="upload-pair">
+    <div class="upload-card${s.estLoaded?' done':''}" id="upEst-${key}" onclick="document.getElementById('fEst-${key}').click()">
+      <div class="upload-icon">📋</div><h3>1. Estimated CSV</h3><p>Routific plan</p>
+      <input type="file" id="fEst-${key}" accept=".csv" onchange="loadEst('${day}','${city}',this.files[0])">
+      <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fEst-${key}').click()">Choose CSV</button>
+      <div class="file-name">${s.estLoaded?'✓ '+s._estFile:''}</div>
+    </div>
+    <div class="upload-card${s.actLoaded?' done':s.estLoaded?'':' locked'}" id="upAct-${key}" onclick="document.getElementById('fAct-${key}').click()">
+      <div class="upload-icon">✅</div><h3>2. Actuals CSV</h3><p>Completed run</p>
+      <input type="file" id="fAct-${key}" accept=".csv" onchange="loadAct('${day}','${city}',this.files[0])">
+      <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fAct-${key}').click()">Choose CSV</button>
+      <div class="file-name">${s.actLoaded?'✓ '+s._actFile:''}</div>
     </div>
   </div>
+  <div class="config-row">
+    <div class="config-card"><label>Delivery Date${day==='Tuesday'?' ✎':' (auto)'}</label>
+      ${day==='Tuesday'?`<input type="date" value="${s.date}" onchange="setTuesdayDate('${city}',this.value)">`:`<div class="val" style="font-family:'DM Mono';font-size:13px">${auDate(s.date)}</div>`}
+    </div>
+    <div class="config-card"><label>Rate / hr ($)</label><input type="number" id="rate-${key}" value="${s._rate||62}" step="0.01" oninput="s._rate=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
+    <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
+  </div>`;
+  // Driver cards
+  if(s.estLoaded){
+    html+=`<div class="section-label">Drivers — ${city}</div><div class="drivers-grid">`;
+    for(const name in s.drivers){
+      const d=s.drivers[name],cv=d._c||{};
+      const estHrs=tM(d.depotEnd)!==null&&tM(d.depotStart)!==null?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
+      html+=`<div class="driver-card">
+        <div class="driver-header"><div class="driver-name">${name}</div><div class="driver-stops">${d.stops} stops · ~${Math.round(d.totalKm)} km</div></div>
+        <div class="driver-body"><div class="fields-grid">
+          <div class="field-group"><label>Est # Boxes</label><div class="val">${d.stops}</div></div>
+          <div class="field-group"><label># Adj ✎</label><input type="number" class="tag-input" id="${key}_${name}_adj" value="${cv.adj||0}" oninput="compute('${day}','${city}','${name}')"></div>
+          <div class="field-group"><label>Act # Boxes</label><div class="val" id="${key}_${name}_actBoxes_display">${cv.actBoxes||d.stops}</div><input type="hidden" id="${key}_${name}_actBoxes" value="${cv.actBoxes||d.stops}"></div>
+          <div class="field-group"><label>Run Start</label><div class="val">${d.depotStart||'—'}</div></div>
+          <div class="field-group"><label>Run End</label><div class="val">${d.depotEnd||'—'}</div></div>
+          <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
+          <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${cv._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${cv._actFirst||''}"></div>
+          <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${cv._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${cv._actLast||''}"></div>
+          <div class="field-group"><label>Bonus & Fines ✎</label><input type="number" class="tag-input" id="${key}_${name}_bonus" value="${cv.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')"></div>
+        </div>
+        <div class="results-strip">
+          <div class="result-item"><div class="r-label">Est Pay</div><div class="r-val" id="${key}_${name}_estPay">${cv.estPay?fmtMoney(cv.estPay):'—'}</div></div>
+          <div class="result-item"><div class="r-label">Est Per Box</div><div class="r-val" id="${key}_${name}_estPerBox">${cv.estPerBox?fmtMoney(cv.estPerBox,1):'—'}</div></div>
+          <div class="result-item"><div class="r-label">Final Per Box</div><div class="r-val" id="${key}_${name}_finalPerBox">${cv.finalPerBox?fmtMoney(cv.finalPerBox,1):'—'}</div></div>
+          <div class="result-item"><div class="r-label">Final Hourly</div><div class="r-val" id="${key}_${name}_finalHourly">${cv.finalHourly?fmtMoney(cv.finalHourly):'—'}</div></div>
+          <div class="result-item"><div class="r-label">Final Pay</div><div class="r-val" id="${key}_${name}_finalPay">${cv.finalPay?fmtMoney(cv.finalPay):'—'}</div></div>
+          <div class="result-item"><div class="r-label">Driver Speed</div><div class="r-val" id="${key}_${name}_speed">${cv.speed!=null?Math.round(cv.speed)+'%':'—'}</div></div>
+          <div class="result-item"><div class="r-label">6PM Finish</div><div class="r-val" id="${key}_${name}_6pm">${cv.sixPM||'—'}</div></div>
+          <div class="result-item"><div class="r-label">Time Taken</div><div class="r-val" id="${key}_${name}_timeTaken">${cv.timeTaken?fmtNum(cv.timeTaken,1)+' min':'—'}</div></div>
+        </div></div></div>`;
+    }
+    html+=`</div>`;
+    // Summary
+    let totB=0,totE=0,totF=0,rows='';
+    for(const name in s.drivers){
+      const cv=s.drivers[name]._c||{},boxes=cv.actBoxes||s.drivers[name].stops;
+      const ep=cv.estPay||0,fp=cv.finalPay||0,fpb=cv.finalPerBox||0,bonus=cv.bonus||0;
+      totB+=boxes;totE+=ep;totF+=fp;
+      const spd=cv.speed!=null?Math.round(cv.speed)+'%':'—';
+      const spdSt=cv.speed!=null&&cv.speed<90?'color:var(--red);font-weight:700':'color:var(--accent);font-weight:700';
+      const sixSt=cv.sixPM&&cv.sixPM.includes('Okay')?'color:var(--accent);font-weight:700':cv.sixPM==='—'?'':(()=>{const p=(cv.sixPM||'').match(/\+(\d+):(\d+)/);if(!p)return'';return(parseInt(p[1])*60+parseInt(p[2]))>=30?'color:var(--red);font-weight:700':'color:#e07a2f;font-weight:700';})();
+      rows+=`<tr id="srow-${day}-${city}-${name}"><td>${name}</td><td>${boxes}</td><td>${fmtMoney(ep)}</td><td>${fmtMoney(fpb,1)}</td><td>${bonus?fmtMoney(bonus):'—'}</td><td><strong>${fmtMoney(fp)}</strong></td><td style="${spdSt}">${spd}</td><td style="${sixSt}">${cv.sixPM||'—'}</td></tr>`;
+    }
+    s._totals={boxes:totB,est:totE,final:totF};
+    html+=`<div class="section-label" style="margin-top:20px">${CITY_CFG[city].flag} ${city} Summary</div>
+    <div class="city-section"><div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Driver</th><th>Boxes</th><th>Est Pay</th><th>Final/Box</th><th>Bonus</th><th>Final Pay</th><th>Speed</th><th>6PM</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>TOTAL</td><td>${totB}</td><td>${fmtMoney(totE)}</td><td>—</td><td>—</td><td>${fmtMoney(totF)}</td><td>—</td><td>—</td></tr></tfoot>
+    </table></div></div>
+    <div class="actions-row">
+      <button class="btn-secondary" onclick="clearCity('${day}','${city}')">✕ Clear ${city}</button>
+    </div>`;
+  } else {
+    html+=`<div class="empty-state"><div class="emoji">📋</div><p>Upload Estimated CSV to get started</p><small>Then upload Actuals CSV to auto-fill times</small></div>`;
+  }
+  html+=`</div></div>`;
+  cont.innerHTML=html;
+  // setup drop zones
+  ['Est','Act'].forEach(t=>{
+    const z=document.getElementById(`up${t}-${key}`); if(!z)return;
+    z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag-over');});
+    z.addEventListener('dragleave',()=>z.classList.remove('drag-over'));
+    z.addEventListener('drop',e=>{
+      e.preventDefault();z.classList.remove('drag-over');
+      const f=e.dataTransfer.files[0];
+      if(f&&f.name.endsWith('.csv')) t==='Est'?loadEst(day,city,f):loadAct(day,city,f);
+    });
+  });
+}
 
-  <div class="section-title">Driver Weekly Breakdown</div>`;
-  [activeWeeklyCity].forEach(city => {
-    const cfg = CITY_CFG[city];
-    const cityDrivers = Object.values(driverW).filter(d => d.city === city);
-    if (!cityDrivers.length) return;
-    const cityTotal = cityDrivers.reduce((a,d) => a + d.finalPay, 0);
-    const cityBoxes = cityDrivers.reduce((a,d) => a + d.boxes, 0);
+// ── CLEAR ─────────────────────────────────────────────────────────────────────
+function clearCity(day,city){
+  const date=state[day][city].date;
+  state[day][city]={drivers:{},date,estLoaded:false,actLoaded:false,_totals:{}};
+  renderDeliveryPage(); updateHomeStatus();
+}
 
-    // ── Food Relief city-wide rate ──
-    // Sum all food relief deductions across all days for this city
-    let cityFRDeduction = 0;
-    ALL_DAYS.forEach(day => {
-      if (!DAY_CITIES[day].includes(city)) return;
-      const frKey = `${day}-${city}`;
-      const fr = frState[frKey]||{loaded:false,foodData:{}};
-      const drivers = state[day][city].drivers||{};
-      for (const name in drivers) {
-        const cv = drivers[name]._c||{};
-        const finalPerBox = cv.finalPerBox||0;
-        const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
-        if (foodBoxes > 0) cityFRDeduction += (finalPerBox - 5.50) * foodBoxes * -1;
+// ── WEEKLY PAGE ───────────────────────────────────────────────────────────────
+function renderWeeklyPage(){
+  const cont=document.getElementById('weekly-content'); if(!cont)return;
+  const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
+  let html=`<div class="city-tabs">`;
+  CITIES.forEach(city=>{
+    const has=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);
+    html+=`<button class="city-tab${city===activeWeeklyCity?' active':''}" onclick="activeWeeklyCity='${city}';renderWeeklyPage()">${CITY_CFG[city].flag} ${city}${has?' 📋':''}</button>`;
+  });
+  html+=`</div>`;
+  if(!hasAny){html+=`<div class="empty-state"><div class="emoji">🌱</div><p>No data loaded yet</p><small>Upload CSVs in Delivery Pay first</small></div>`;cont.innerHTML=html;return;}
+  const city=activeWeeklyCity;
+  const COLS=[{l:'Driver',w:'120px'},{l:'Rate/hr',w:'70px'},{l:'Est # Boxes',w:'80px'},{l:'# Adj',w:'55px'},{l:'Act # Boxes',w:'80px'},{l:'Est First Stop',w:'90px'},{l:'Est Last Stop',w:'90px'},{l:'Est Time (hrs)',w:'90px'},{l:'Act First Stop',w:'90px'},{l:'Act Last Stop',w:'90px'},{l:'Bonus & Fines',w:'90px'},{l:'Est Pay',w:'80px'},{l:'Est Per Box',w:'80px'},{l:'Final Per Box',w:'80px'},{l:'6PM Finish',w:'80px'},{l:'Driver Speed',w:'85px'},{l:'Final Hourly',w:'85px'},{l:'Final Pay',w:'85px'}];
+  const thead=`<thead><tr>${COLS.map(c=>`<th style="min-width:${c.w}">${c.l}</th>`).join('')}</tr></thead>`;
+  let grandB=0,grandF=0;
+  const driverW={};
+  ALL_DAYS.forEach(day=>{
+    const active=DAY_CITIES[day].filter(c=>state[day][c].estLoaded&&c===city);
+    if(!active.length)return;
+    active.forEach(city2=>{
+      const s=state[day][city2],drivers=s.drivers,rate=s._rate||62;
+      let totB=0,totE=0,totF=0,rows='';
+      for(const name in drivers){
+        const d=drivers[name],cv=d._c||{};
+        const estHrs=d.depotStart&&d.depotEnd?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
+        const actB=cv.actBoxes||d.stops,adj=cv.adj||0,bonus=cv.bonus||0;
+        const ep=cv.estPay||0,epb=cv.estPerBox||0,fpb=cv.finalPerBox||0;
+        const fp=cv.finalPay||0,fh=cv.finalHourly||0,sp=cv.speed,sixPM=cv.sixPM||'—';
+        totB+=actB;totE+=ep;totF+=fp;
+        const spdSt=sp!=null&&sp<90?'color:var(--red);font-weight:700':'';
+        const sixSt=sixPM.includes('Okay')?'color:var(--accent);font-weight:700':sixPM==='—'?'':(()=>{const p=sixPM.match(/\+(\d+):(\d+)/);if(!p)return'';return(parseInt(p[1])*60+parseInt(p[2]))>=30?'color:var(--red);font-weight:700':'color:#e07a2f;font-weight:700';})();
+        rows+=`<tr><td style="font-weight:600">${name}</td><td>${fmtMoney(rate)}</td><td>${d.stops}</td><td>${adj||'—'}</td><td>${actB}</td><td>${d.depotStart||'—'}</td><td>${d.depotEnd||'—'}</td><td>${estHrs}</td><td>${cv._actFirst||'—'}</td><td>${cv._actLast||'—'}</td><td>${bonus?fmtMoney(bonus):'—'}</td><td>${fmtMoney(ep)}</td><td>${fmtMoney(epb,1)}</td><td>${fmtMoney(fpb,1)}</td><td style="${sixSt}">${sixPM}</td><td style="${spdSt}">${sp!=null?Math.round(sp)+'%':'—'}</td><td>${fmtMoney(fh)}</td><td style="font-weight:700">${fmtMoney(fp)}</td></tr>`;
+        const wk=name+'||'+city2;
+        if(!driverW[wk])driverW[wk]={name,city:city2,boxes:0,finalPay:0,days:0};
+        driverW[wk].boxes+=actB;driverW[wk].finalPay+=fp;driverW[wk].days++;
+      }
+      grandB+=totB;grandF+=totF;
+      s._totals={boxes:totB,est:totE,final:totF};
+      html+=`<div class="city-section" style="margin-bottom:16px">
+        <div class="city-section-header">
+          <div class="city-section-title">${CITY_CFG[city2].flag} ${city2} — ${day} <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:4px">${auDate(s.date)}</span></div>
+          <div class="city-section-meta">${totB} boxes · ${fmtMoney(totF)}</div>
+        </div>
+        <div class="table-wrap"><table class="data-table" style="min-width:1100px">${thead}<tbody>${rows}</tbody>
+          <tfoot><tr><td>TOTAL</td><td>—</td><td>—</td><td>—</td><td>${totB}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${fmtMoney(totE)}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${fmtMoney(totF)}</td></tr></tfoot>
+        </table></div></div>`;
+    });
+  });
+  // Grand total
+  html+=`<div class="summary-card"><h3>Weekly Grand Total</h3><div class="summary-grid">
+    <div class="summary-item"><div class="s-label">Total Boxes</div><div class="s-val">${grandB}</div></div>
+    <div class="summary-item"><div class="s-label">Total Driver Pay</div><div class="s-val">${fmtMoney(grandF)}</div></div>
+    <div class="summary-item"><div class="s-label">Avg $ / Box</div><div class="s-val">${grandB>0?fmtMoney(grandF/grandB):'—'}</div></div>
+  </div></div>`;
+  // Driver breakdown
+  html+=`<div class="section-label" style="margin-top:24px">Driver Weekly Breakdown</div>`;
+  [city].forEach(c2=>{
+    const cityDrivers=Object.values(driverW).filter(d=>d.city===c2);
+    if(!cityDrivers.length)return;
+    const cityTotal=cityDrivers.reduce((a,d)=>a+d.finalPay,0);
+    const cityBoxes=cityDrivers.reduce((a,d)=>a+d.boxes,0);
+    let cityFRDed=0;
+    ALL_DAYS.forEach(day=>{
+      if(!DAY_CITIES[day].includes(c2))return;
+      const fr=frState[day+'-'+c2]||{};
+      for(const name in state[day][c2].drivers){
+        const cv=state[day][c2].drivers[name]._c||{};
+        const fb=fr.loaded?(fr.foodData?.[name]||0):(cv.foodBoxes||0);
+        if(fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;
       }
     });
-    const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
-    const frPct = (frRate * 100).toFixed(2);
-    const hasFR = cityFRDeduction !== 0;
-    const colHeader = hasFR
-      ? `Food Relief Box (${frPct}%)`
-      : 'Food Relief Box';
-
-    // ── Fuel compensation per driver for this city ──
-    const driverFuel = {};
-    if(fuelVehicleType[city]) {
-      const driverKM = {};
-      ALL_DAYS.forEach(day => {
-        if(!DAY_CITIES[day].includes(city)) return;
-        for(const name in state[day][city].drivers){
-          if(!driverKM[name]) driverKM[name]=0;
-          driverKM[name] += state[day][city].drivers[name].totalKm||0;
-        }
-      });
-      for(const name in driverKM){
-        const vtype = (fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
-        const rates = FUEL_RATES[vtype];
-        const km = driverKM[name];
-        const litres = (km/100)*rates.economy;
-        const comp = (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
-        driverFuel[name] = comp;
-      }
+    const frRate=cityTotal>0?cityFRDed/cityTotal:0;
+    const frPct=(frRate*100).toFixed(2);
+    const driverKM={};
+    ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(c2))return;for(const n in state[day][c2].drivers){if(!driverKM[n])driverKM[n]=0;driverKM[n]+=state[day][c2].drivers[n].totalKm||0;}});
+    const driverFuel={};
+    for(const name in driverKM){
+      const vt=(fuelVehicleType[c2]&&fuelVehicleType[c2][name])||'Diesel';
+      const r=FUEL_RATES[vt];
+      const litres=(driverKM[name]/100)*r.economy;
+      driverFuel[name]=(r.newPrice-r.base)*litres*REIMBURSE_RATE;
     }
-    const totalFuelComp = Object.values(driverFuel).reduce((a,b)=>a+b,0);
-
-    html += `
-    <div class="weekly-day-block" style="overflow-x:auto;margin-bottom:14px">
-      <div style="background:var(--olive-pale);padding:10px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
-        <div style="font-weight:700;color:var(--olive);font-size:13px">${city}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
-          ${cityBoxes} boxes &nbsp;·&nbsp; ${fmtMoney(cityTotal)}
-          ${hasFR ? `&nbsp;·&nbsp; FR: <strong style="color:#c0392b">${cityFRDeduction.toFixed(2)}</strong> (${frPct}%)` : ''}
-          ${totalFuelComp>0 ? `&nbsp;·&nbsp; ⛽ ${fmtMoney(totalFuelComp, 0)}` : ''}
+    const totalFuel=Object.values(driverFuel).reduce((a,b)=>a+b,0);
+    const colH=cityFRDed!==0?`Food Relief Box (${frPct}%)`:'Food Relief Box';
+    html+=`<div class="city-section" style="margin-bottom:14px">
+      <div class="city-section-header">
+        <div class="city-section-title">${CITY_CFG[c2].flag} ${c2}</div>
+        <div class="city-section-meta">${cityBoxes} boxes · ${fmtMoney(cityTotal)}${cityFRDed!==0?` · FR: <span style="color:var(--red)">${fmtNum(cityFRDed)}</span> (${frPct}%)`:''} ${totalFuel>0?`· ⛽ ${fmtMoney(totalFuel,0)}`:''}
         </div>
       </div>
-      <table class="wi-table">
-        <thead><tr>
-          <th>Driver</th><th>Days</th><th>Boxes</th>
-          <th>Delivery Costs</th><th>${colHeader}</th>
-          <th>⛽ Fuel Comp</th><th>Net Pay</th>
-        </tr></thead>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Driver</th><th>Days</th><th>Boxes</th><th>Delivery Costs</th><th>${colH}</th><th>⛽ Fuel Comp</th><th>Net Pay</th></tr></thead>
         <tbody>`;
-    cityDrivers.forEach(d => {
-      const frDeduction = cityTotal > 0 ? d.finalPay * frRate : 0;
-      const fuelComp = driverFuel[d.name]||0;
-      const netPay = d.finalPay + frDeduction + fuelComp;
-      html += `<tr>
-        <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${d.name}</td>
-        <td>${d.days}</td>
-        <td>${d.boxes}</td>
-        <td>${fmtMoney(d.finalPay)}</td>
-        <td style="${frDeduction<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">
-          ${frDeduction!==0?frDeduction.toFixed(2):'—'}
-        </td>
-        <td style="color:#5a5a5a">
-          ${fuelComp>0?'+$'+Math.round(fuelComp):'—'}
-        </td>
-        <td style="font-weight:700;color:#1b1c1e">${fmtMoney(netPay)}</td>
-      </tr>`;
+    cityDrivers.forEach(d=>{
+      const frDed=cityTotal>0?d.finalPay*frRate:0;
+      const fuel=driverFuel[d.name]||0;
+      const net=d.finalPay+frDed+fuel;
+      html+=`<tr><td>${d.name}</td><td>${d.days}</td><td>${d.boxes}</td><td>${fmtMoney(d.finalPay)}</td><td style="${frDed<0?'color:var(--red);font-weight:700':'color:var(--text-muted)'}">${frDed!==0?fmtNum(frDed):'—'}</td><td style="color:var(--text-muted)">${fuel>0?'+'+fmtMoney(fuel,0):'—'}</td><td style="font-weight:700">${fmtMoney(net)}</td></tr>`;
     });
-    // totals row
-    const totalFRDeduction = cityTotal > 0 ? cityTotal * frRate : 0;
-    const grandNet = cityTotal + totalFRDeduction + totalFuelComp;
-    html += `
-      <tfoot><tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
-        <td>TOTAL</td><td>—</td><td>${cityBoxes}</td>
-        <td>${fmtMoney(cityTotal)}</td>
-        <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
-        <td>${totalFuelComp>0?'+$'+Math.round(totalFuelComp):'—'}</td>
-        <td>${fmtMoney(grandNet)}</td>
-      </tr></tfoot>
-    </tbody></table>
-    </div>`;
+    const totFR=cityTotal>0?cityTotal*frRate:0;
+    const grandNet=cityTotal+totFR+totalFuel;
+    html+=`</tbody><tfoot><tr><td>TOTAL</td><td>—</td><td>${cityBoxes}</td><td>${fmtMoney(cityTotal)}</td><td style="${totFR<0?'color:var(--red)':''}">${totFR!==0?fmtNum(totFR):'—'}</td><td>${totalFuel>0?'+'+fmtMoney(totalFuel,0):'—'}</td><td>${fmtMoney(grandNet)}</td></tr></tfoot>
+      </table></div></div>`;
   });
-  html += `
-  <div class="actions-row">
-    <button class="export-btn orange" onclick="exportWeekly()">⬇ Export Weekly CSV</button>
-  </div>`;
-  main.innerHTML+=html;
+  html+=`<div class="actions-row"><button class="btn-primary" onclick="exportWeekly()">⬇ Export Weekly CSV</button></div>`;
+  cont.innerHTML=html;
 }
 
-
-// ── FOOD RELIEF ───────────────────────────────────────────────────────────────
-function renderFoodRelief(){
-  const main=document.getElementById('mainContent');
+// ── FOOD RELIEF PAGE ──────────────────────────────────────────────────────────
+function renderFoodReliefPage(){
+  const cont=document.getElementById('foodrelief-content'); if(!cont)return;
   const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
-
-  // Check if any main data is loaded at all
-  if(!hasAny){
-    main.innerHTML=`<div class="empty-state"><div class="emoji">🫙</div><p>Load your delivery data first</p><small>Upload CSVs in the day tabs first, then come back here to upload Food Relief CSVs</small></div>`;
-    return;
-  }
-
-  const frSubHtml=`<div class="city-subtabs">`+CITIES.map(city=>{
-    const cfg=CITY_CFG[city];
+  let html=`<div class="city-tabs">`;
+  CITIES.forEach(city=>{
     const has=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);
     const frLoaded=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&frState[day+'-'+city]?.loaded);
-    return `<button class="city-subtab${city===activeFRCity?' active':''}" onclick="activeFRCity='${city}';renderFoodRelief()">`+
-      `${city}`+
-      (frLoaded?` <span class="subtab-status">✅</span>`:has?` <span class="subtab-status">📋</span>`:'')+
-      `</button>`;
-  }).join('')+`</div>`;
-  main.innerHTML=frSubHtml;
-
-  let html='', grandDeduction=0, grandFinalPay=0;
-
+    html+=`<button class="city-tab${city===activeFRCity?' active':''}" onclick="activeFRCity='${city}';renderFoodReliefPage()">${CITY_CFG[city].flag} ${city} ${frLoaded?'✅':has?'📋':''}</button>`;
+  });
+  html+=`</div>`;
+  if(!hasAny){html+=`<div class="empty-state"><div class="emoji">📦</div><p>No data loaded yet</p></div>`;cont.innerHTML=html;return;}
+  const city=activeFRCity;
+  let grandDed=0,grandPay=0;
   ALL_DAYS.forEach(day=>{
-    const activeCities=DAY_CITIES[day].filter(city=>state[day][city].estLoaded&&city===activeFRCity);
-    if(!activeCities.length)return;
-
-    activeCities.forEach(city=>{
-      const s=state[day][city], cfg=CITY_CFG[city], drivers=s.drivers;
-      const frKey=`${day}-${city}`;
+    const active=DAY_CITIES[day].filter(c=>state[day][c].estLoaded&&c===city);
+    if(!active.length)return;
+    active.forEach(c2=>{
+      const s=state[day][c2],frKey=day+'-'+c2;
       const fr=frState[frKey]||{loaded:false,fileName:'',foodData:{}};
-      let rows='', dayFinal=0, dayDeduction=0;
-
-      for(const name in drivers){
-        const cv=drivers[name]._c||{};
-        const foodBoxes=fr.loaded?(fr.foodData[name]||0):(cv.foodBoxes||0);
-        const finalPay=cv.finalPay||0;
-        const finalPerBox=cv.finalPerBox||0;
-        const foodRate=5.50;
-        const foodDeduction=foodBoxes>0?(finalPerBox-foodRate)*foodBoxes*-1:0;
-        const pct=finalPay>0?(foodDeduction/finalPay)*100:0;
-        dayFinal+=finalPay; dayDeduction+=foodDeduction;
-        rows+=`<tr>
-          <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${name}</td>
-          <td style="text-align:center">${foodBoxes}</td>
-          <td style="${foodDeduction<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">${foodDeduction!==0?foodDeduction.toFixed(2):'—'}</td>
-          <td>${fmtMoney(finalPerBox)}</td>
-          <td style="font-weight:700">${fmtMoney(finalPay)}</td>
-          <td style="${pct<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">${pct.toFixed(2)}%</td>
-        </tr>`;
+      let rows='',dayDed=0,dayPay=0;
+      for(const name in s.drivers){
+        const cv=s.drivers[name]._c||{};
+        const fb=fr.loaded?(fr.foodData[name]||0):(cv.foodBoxes||0);
+        const fp=cv.finalPay||0,fpb=cv.finalPerBox||0;
+        const ded=fb>0?(fpb-5.50)*fb*-1:0;
+        const pct=fp>0?(ded/fp)*100:0;
+        dayPay+=fp;dayDed+=ded;
+        rows+=`<tr><td>${name}</td><td style="text-align:center">${fb}</td><td style="${ded<0?'color:var(--red);font-weight:700':''}">${ded!==0?fmtNum(ded):'—'}</td><td>${fmtMoney(fpb,1)}</td><td>${fmtMoney(fp)}</td><td style="${pct<0?'color:var(--red);font-weight:700':''}">${pct.toFixed(2)}%</td></tr>`;
       }
-      grandDeduction+=dayDeduction; grandFinalPay+=dayFinal;
-
-      html+=`<div class="weekly-day-block" style="margin-bottom:20px">
-        <!-- City/Day Header -->
-        <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:10px">
-            
-            <div>
-              <div style="font-size:14px;font-weight:800">${city} — ${day}</div>
-              <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--olive-mid);margin-top:2px">${auDate(s.date)}</div>
-            </div>
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
-            Deductions: <strong style="${dayDeduction<0?'color:#c0392b':''}">${dayDeduction.toFixed(2)}</strong>
-            &nbsp;·&nbsp; Total Pay: <strong>${fmtMoney(dayFinal)}</strong>
-          </div>
+      grandDed+=dayDed;grandPay+=dayPay;
+      html+=`<div class="city-section" style="margin-bottom:16px">
+        <div class="city-section-header">
+          <div class="city-section-title">${CITY_CFG[c2].flag} ${c2} — ${day} <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:4px">${auDate(s.date)}</span></div>
+          <div class="city-section-meta">Deductions: <span style="${dayDed<0?'color:var(--red);font-weight:700':''}">${fmtNum(dayDed)}</span> · Pay: ${fmtMoney(dayPay)}</div>
         </div>
-
-        <!-- Upload slot for this day+city -->
-        <div style="padding:14px 16px;background:var(--cream);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px">Food Relief CSV</div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <input type="file" id="frFile-${frKey}" accept=".csv" style="display:none" onchange="loadFoodReliefCSV('${day}','${city}',event)">
-              <button class="upload-btn" style="margin:0" onclick="document.getElementById('frFile-${frKey}').click()">
-                ${fr.loaded?'↺ Re-upload':'Choose CSV'}
-              </button>
-              ${fr.loaded
-                ? `<span style="font-size:11px;color:var(--olive);font-weight:600">✓ ${fr.fileName}</span>`
-                : `<span style="font-size:11px;color:var(--text-muted)">No file uploaded yet</span>`
-              }
-            </div>
-          </div>
+        <div style="padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+          <input type="file" id="frFile-${frKey}" accept=".csv" style="display:none" onchange="loadFoodReliefCSV('${day}','${c2}',event)">
+          <button class="upload-btn" style="margin:0" onclick="document.getElementById('frFile-${frKey}').click()">${fr.loaded?'↺ Re-upload':'Choose CSV'}</button>
+          <span style="font-size:11px;color:${fr.loaded?'var(--accent)':'var(--text-muted)'}">${fr.loaded?'✓ '+fr.fileName:'No file uploaded'}</span>
         </div>
-
-        <!-- Table -->
-        <div style="overflow-x:auto">
-        <table class="wi-table">
-          <thead><tr>
-            <th>Driver</th>
-            <th>Food Relief Boxes</th>
-            <th>Deduction ($)</th>
-            <th>Final Per Box</th>
-            <th>Final Pay</th>
-            <th>%</th>
-          </tr></thead>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Driver</th><th>Food Relief Boxes</th><th>Deduction ($)</th><th>Final Per Box</th><th>Final Pay</th><th>%</th></tr></thead>
           <tbody>${rows}</tbody>
-          <tfoot>
-            <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
-              <td>TOTAL</td><td>—</td>
-              <td style="${dayDeduction<0?'color:#c0392b':''}">${dayDeduction.toFixed(2)}</td>
-              <td>—</td>
-              <td>${fmtMoney(dayFinal)}</td>
-              <td style="${dayDeduction<0?'color:#c0392b':''}">${dayFinal>0?((dayDeduction/dayFinal)*100).toFixed(2)+'%':'—'}</td>
-            </tr>
-          </tfoot>
-        </table>
-        </div>
-      </div>`;
+          <tfoot><tr><td>TOTAL</td><td>—</td><td style="${dayDed<0?'color:var(--red)':''}">${fmtNum(dayDed)}</td><td>—</td><td>${fmtMoney(dayPay)}</td><td style="${dayDed<0?'color:var(--red)':''}">${dayPay>0?((dayDed/dayPay)*100).toFixed(2)+'%':'—'}</td></tr></tfoot>
+        </table></div></div>`;
     });
   });
-
-  // Grand summary
-  html+=`<div class="weekly-grand">
-    <h3>🫙 Food Relief Weekly Summary</h3>
-    <div class="grand-grid">
-      <div class="grand-item"><div class="grand-label">Total Final Pay</div><div class="grand-val">${fmtMoney(grandFinalPay)}</div></div>
-      <div class="grand-item"><div class="grand-label">Total Deductions</div><div class="grand-val">${grandDeduction.toFixed(2)}</div></div>
-      <div class="grand-item"><div class="grand-label">Net %</div><div class="grand-val">${grandFinalPay>0?((grandDeduction/grandFinalPay)*100).toFixed(2)+'%':'—'}</div></div>
-    </div>
-  </div>
-  <div class="actions-row">
-    <button class="export-btn orange" onclick="exportFoodRelief()">⬇ Export Food Relief CSV</button>
-  </div>`;
-  main.innerHTML+=html;
+  html+=`<div class="summary-card"><h3>📦 Food Relief Weekly Summary</h3><div class="summary-grid">
+    <div class="summary-item"><div class="s-label">Total Final Pay</div><div class="s-val">${fmtMoney(grandPay)}</div></div>
+    <div class="summary-item"><div class="s-label">Total Deductions</div><div class="s-val">${fmtNum(grandDed)}</div></div>
+    <div class="summary-item"><div class="s-label">Net %</div><div class="s-val">${grandPay>0?((grandDed/grandPay)*100).toFixed(2)+'%':'—'}</div></div>
+  </div></div>
+  <div class="actions-row"><button class="btn-primary" onclick="exportFoodRelief()">⬇ Export Food Relief CSV</button></div>`;
+  cont.innerHTML=html;
 }
 
-// ── LOAD FOOD RELIEF CSV ──────────────────────────────────────────────────────
 function loadFoodReliefCSV(day,city,event){
   const file=event.target.files[0]; if(!file)return;
   const reader=new FileReader();
   reader.onload=e=>{
-    const rows=parseCSV(e.target.result),h=rows[0];
+    const rows=parseCSV(e.target.result),h=rows[0],idx=k=>h.indexOf(k);
     const foodData={};
-    // detect column names — support both Routific full CSV and simplified food relief CSV
-    const nameCol   = h.indexOf('Driver Name')>=0 ? 'Driver Name' : 'Driver';
-    const typesCol  = h.indexOf('Types')>=0 ? 'Types' : h.indexOf('Food Relief')>=0 ? 'Food Relief' : null;
-    const stopCol   = h.indexOf('Stop Number')>=0 ? 'Stop Number' : null;
-    const idx = k => h.indexOf(k);
+    const nameCol=h.indexOf('Driver Name')>=0?'Driver Name':'Driver';
+    const typesCol=h.indexOf('Types')>=0?'Types':h.indexOf('Food Relief')>=0?'Food Relief':null;
+    const stopCol=h.indexOf('Stop Number')>=0?'Stop Number':null;
     for(let i=1;i<rows.length;i++){
-      const r=rows[i];
-      const name=(r[idx(nameCol)]||'').trim();
-      if(!name)continue;
-      // if there's a stop number column, skip depot stops
-      if(stopCol){
-        const stop=parseInt(r[idx(stopCol)]);
-        if(stop===0||stop===999)continue;
-      }
+      const r=rows[i];const name=(r[idx(nameCol)]||'').trim();if(!name)continue;
+      if(stopCol){const s=parseInt(r[idx(stopCol)]);if(s===0||s===999)continue;}
       const types=typesCol?(r[idx(typesCol)]||''):'';
-      if(types.toUpperCase().includes('FOOD')){
-        if(!foodData[name])foodData[name]=0;
-        foodData[name]++;
-      }
+      if(types.toUpperCase().includes('FOOD')){if(!foodData[name])foodData[name]=0;foodData[name]++;}
     }
-    const frKey=`${day}-${city}`;
-    frState[frKey]={loaded:true,fileName:file.name,foodData};
-    renderFoodRelief();
+    frState[day+'-'+city]={loaded:true,fileName:file.name,foodData};
+    renderFoodReliefPage();
   };
   reader.readAsText(file);
 }
 
-// ── FUEL REIMBURSEMENT ────────────────────────────────────────────────────────
-const FUEL_RATES = {
-  Diesel: { base: 1.90, newPrice: 3.04, economy: 13 },
-  Petrol: { base: 1.80, newPrice: 2.50, economy: 16 }
-};
-const REIMBURSE_RATE = 0.50;
-
-function setFuelType(city, name, value){
-  if(!fuelVehicleType[city]) fuelVehicleType[city]={};
-  fuelVehicleType[city][name]=value;
-  renderFuel();
-}
-
-function renderFuel(){
-  const main = document.getElementById('mainContent');
-  const hasAny = ALL_DAYS.some(day => DAY_CITIES[day].some(city => state[day][city].estLoaded));
-  if(!hasAny){
-    main.innerHTML=`<div class="empty-state"><div class="emoji">⛽</div><p>No data loaded yet</p><small>Upload Estimated CSVs in the day tabs first</small></div>`;
-    return;
-  }
-
-  // city sub-tabs
-  const subHtml = `<div class="city-subtabs">` + CITIES.map(city => {
-    const cfg = CITY_CFG[city];
-    const has = ALL_DAYS.some(day => DAY_CITIES[day].includes(city) && state[day][city].estLoaded);
-    return `<button class="city-subtab${city===activeFuelCity?' active':''}" onclick="activeFuelCity='${city}';renderFuel()">
-      ${city}
-      ${has?'<span class="subtab-status">📋</span>':''}
-    </button>`;
-  }).join('') + `</div>`;
-  main.innerHTML = subHtml;
-
-  const city = activeFuelCity;
-  const cfg = CITY_CFG[city];
-  if(!fuelVehicleType[city]) fuelVehicleType[city] = {};
-
-  // collect all drivers + total KM across all days for this city
-  const driverKM = {};
-  ALL_DAYS.forEach(day => {
-    if(!DAY_CITIES[day].includes(city)) return;
-    const drivers = state[day][city].drivers;
-    for(const name in drivers){
-      if(!driverKM[name]) driverKM[name] = 0;
-      driverKM[name] += drivers[name].totalKm || 0;
-    }
-  });
-
-  if(!Object.keys(driverKM).length){
-    main.innerHTML += `<div class="empty-state"><div class="emoji">⛽</div><p>No drivers loaded for ${city} yet</p><small>Upload Estimated CSVs in the day tabs first</small></div>`;
-    return;
-  }
-
-  // rates reference table
-  let html = `
-  <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">${city} — Fuel Rates Reference</div>
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">Reimbursement Rate: 50%</div>
-    </div>
-    <div style="overflow-x:auto">
-    <table class="wi-table">
-      <thead><tr>
-        <th>Vehicle Type</th><th>Economy (L/100km)</th><th>Base Price ($)</th><th>New Price ($)</th>
-      </tr></thead>
-      <tbody>
-        <tr><td style="font-weight:700;color:#1b1c1e">Diesel</td><td>13</td><td>$1.90</td><td>$3.04</td></tr>
-        <tr><td style="font-weight:700;color:#1b1c1e">Petrol</td><td>16</td><td>$1.80</td><td>$2.50</td></tr>
-      </tbody>
-    </table>
-    </div>
-  </div>
-
-  <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">${city} — Weekly Fuel Reimbursement</div>
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">KM from Estimated CSVs · All days combined</div>
-    </div>
-    <div style="overflow-x:auto">
-    <table class="wi-table">
-      <thead><tr>
-        <th>Driver</th><th>Vehicle Type</th><th>KM Driven</th>
-        <th>Base Price</th><th>New Price</th><th>Litres Used</th><th>Compensation ($)</th>
-      </tr></thead>
-      <tbody>`;
-
-  let totalComp = 0;
-  for(const name in driverKM){
-    if(!fuelVehicleType[city][name]) fuelVehicleType[city][name] = 'Diesel';
-    const vtype = fuelVehicleType[city][name];
-    const rates = FUEL_RATES[vtype];
-    const km = driverKM[name];
-    const litres = (km / 100) * rates.economy;
-    const comp = (rates.newPrice - rates.base) * litres * REIMBURSE_RATE;
-    totalComp += comp;
-
-    const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
-    html += `<tr>
-      <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${name}</td>
-      <td>
-        <select id="${selId}" onchange="setFuelType('${city}','${name}',this.value)"
-          style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1.5px solid var(--border);background:white;color:var(--olive);cursor:pointer">
-          <option value="Diesel"${vtype==='Diesel'?' selected':''}>Diesel</option>
-          <option value="Petrol"${vtype==='Petrol'?' selected':''}>Petrol</option>
-        </select>
-      </td>
-      <td>${Math.round(km)}</td>
-      <td>${fmtMoney(rates.base)}</td>
-      <td>${fmtMoney(rates.newPrice)}</td>
-      <td>${litres.toFixed(1)}</td>
-      <td style="font-weight:700;color:#1b1c1e">${fmtMoney(comp, 0)}</td>
-    </tr>`;
-  }
-
-  html += `</tbody>
-    <tfoot>
-      <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
-        <td>TOTAL</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
-        <td>${fmtMoney(totalComp, 0)}</td>
-      </tr>
-    </tfoot>
-    </table>
-    </div>
-  </div>
-  <div class="actions-row">
-    <button class="export-btn orange" onclick="exportFuel()">⬇ Export Fuel CSV</button>
-  </div>`;
-
-  main.innerHTML += html;
-}
-
-function exportFuel(){
-  const city = activeFuelCity;
-  if(!fuelVehicleType[city]) fuelVehicleType[city]={};
-  const driverKM = {};
-  ALL_DAYS.forEach(day => {
-    if(!DAY_CITIES[day].includes(city)) return;
-    for(const name in state[day][city].drivers){
-      if(!driverKM[name]) driverKM[name] = 0;
-      driverKM[name] += state[day][city].drivers[name].totalKm||0;
-    }
-  });
-  let csv = 'Driver,City,Vehicle Type,KM Driven,Base Price,New Price,Litres Used,Compensation\n';
-  for(const name in driverKM){
-    const vtype = fuelVehicleType[city][name]||'Diesel';
-    const rates = FUEL_RATES[vtype];
-    const km = driverKM[name];
-    const litres = (km/100)*rates.economy;
-    const comp = (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
-    csv += [name,city,vtype,Math.round(km),rates.base,rates.newPrice,litres.toFixed(1),Math.round(comp)].join(',')+'\n';
-  }
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`funky-food-fuel-${city}.csv`; a.click();
-}
-
-// ── EXPORT ────────────────────────────────────────────────────────────────────
-function exportCity(day,city){
-  let csv='Driver,City,Date,Day,Act Boxes,Est Pay,Final Per Box,Bonus & Fines,Final Pay,Driver Speed,6PM Finish\n';
-  for(const name in state[day][city].drivers){
-    const c=state[day][city].drivers[name]._c||{};
-    csv+=[name,city,state[day][city].date,day,c.actBoxes||'',
-      c.estPay?c.estPay.toFixed(2):'',c.finalPerBox?c.finalPerBox.toFixed(2):'',
-      c.bonus||0,c.finalPay?c.finalPay.toFixed(2):'',
-      c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
-  }
-  dl(csv,`funky-food-pay-${city}-${day}-${state[day][city].date||'export'}.csv`);
-}
-function exportWeekly(){
-  let csv='Day,City,Date,Driver,Act Boxes,Final Per Box,Bonus & Fines,Final Pay,Driver Speed,6PM Finish\n';
-  ALL_DAYS.forEach(day=>DAY_CITIES[day].filter(c=>state[day][c].estLoaded).forEach(city=>{
-    for(const name in state[day][city].drivers){
-      const c=state[day][city].drivers[name]._c||{};
-      csv+=[day,city,state[day][city].date,name,c.actBoxes||'',
-        c.finalPerBox?c.finalPerBox.toFixed(2):'',c.bonus||0,
-        c.finalPay?c.finalPay.toFixed(2):'',
-        c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
-    }
-  }));
-  dl(csv,'funky-food-weekly-pay.csv');
-}
-
-function exportFoodRelief(){
-  let csv='Day,City,Date,Driver,Food Relief Boxes,Deduction,Final Per Box,Final Pay,%\n';
-  ALL_DAYS.forEach(day=>DAY_CITIES[day].filter(c=>state[day][c].actLoaded).forEach(city=>{
-    for(const name in state[day][city].drivers){
-      const cv=state[day][city].drivers[name]._c||{};
-      const fp=cv.finalPay||0, fd=cv.foodDeduction||0;
-      const pct=fp>0?(fd/fp)*100:0;
-      csv+=[day,city,state[day][city].date,name,
-        cv.foodBoxes||0,fd.toFixed(2),
-        cv.finalPerBox?cv.finalPerBox.toFixed(2):'',
-        fp.toFixed(2),pct.toFixed(2)+'%'].join(',')+'\n';
-    }
-  }));
-  dl(csv,'funky-food-food-relief.csv');
-}
-function dl(csv,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();}
-
-function clearCity(day,city){
-  const date=state[day][city].date;
-  state[day][city]={drivers:{},date,estLoaded:false,actLoaded:false,_totals:{}};
-  updateDot(day,city);buildMain();
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-// ── INVOICES ──────────────────────────────────────────────────────────────────
-function renderInvoice(){
-  const main = document.getElementById('mainContent');
-  const hasAny = ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
-  if(!hasAny){
-    main.innerHTML=`<div class="empty-state"><div class="emoji">🧾</div><p>No data loaded yet</p><small>Upload CSVs in the day tabs first</small></div>`;
-    return;
-  }
-
-  // today as default submitted date
-  if(!invoiceSettings.submittedOn) invoiceSettings.submittedOn = new Date().toISOString().split('T')[0];
-  if(!invoiceSettings.dueDate){
-    const d = new Date(invoiceSettings.submittedOn); d.setDate(d.getDate()+7);
-    invoiceSettings.dueDate = d.toISOString().split('T')[0];
-  }
-
-  // city sub-tabs
-  let html = `<div class="city-subtabs">` + CITIES.map(city=>{
-    const cfg=CITY_CFG[city];
+// ── FUEL PAGE ─────────────────────────────────────────────────────────────────
+function renderFuelPage(){
+  const cont=document.getElementById('fuel-content'); if(!cont)return;
+  const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
+  let html=`<div class="city-tabs">`;
+  CITIES.forEach(city=>{
     const has=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);
-    return `<button class="city-subtab${city===activeInvoiceCity?' active':''}" onclick="activeInvoiceCity='${city}';renderInvoice()">
-      ${city}${has?' <span class="subtab-status">📋</span>':''}
-    </button>`;
-  }).join('') + `</div>`;
-
-  // Global settings card
-  html += `<div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">🧾 Invoice Settings</div>
-    </div>
-    <div style="padding:20px;background:var(--surface)">
-      <div class="config-row" style="margin-bottom:0">
-        <div class="config-card">
-          <label>Submitted On</label>
-          <input type="date" id="inv-submittedOn" value="${invoiceSettings.submittedOn}"
-            onchange="invoiceSettings.submittedOn=this.value;
-              const d=new Date(this.value);d.setDate(d.getDate()+7);
-              invoiceSettings.dueDate=d.toISOString().split('T')[0];
-              renderInvoice()">
-        </div>
-        <div class="config-card">
-          <label>Due Date (auto +7 days)</label>
-          <div class="val" style="font-family:'DM Mono',monospace;font-size:13px;color:#1b1c1e">${auDate(invoiceSettings.dueDate)||'—'}</div>
-        </div>
-        <div class="config-card">
-          <label>Invoice # Start</label>
-          <input type="text" id="inv-start" value="${invoiceSettings.invoiceStart}"
-            onchange="invoiceSettings.invoiceStart=this.value">
-        </div>
-        <div class="config-card">
-          <label>Delivery Date From</label>
-          <input type="date" id="inv-dateFrom" value="${invoiceSettings.dateFrom||''}"
-            onchange="invoiceSettings.dateFrom=this.value">
-        </div>
-        <div class="config-card">
-          <label>Delivery Date To</label>
-          <input type="date" id="inv-dateTo" value="${invoiceSettings.dateTo||''}"
-            onchange="invoiceSettings.dateTo=this.value">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Driver Details CSV Upload -->
-  <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">👥 Driver Details CSV</div>
-      <div style="font-size:11px;color:#1b1c1e">Columns: City, Driver Name, Company Name, Phone, ABN, Address, Email, BSB, Account</div>
-    </div>
-    <div style="padding:16px 20px;background:var(--surface);display:flex;align-items:center;gap:14px">
-      <input type="file" id="driverDetailsFile" accept=".csv" style="display:none" onchange="loadDriverDetails(event)">
-      <button class="upload-btn" style="margin:0" onclick="document.getElementById('driverDetailsFile').click()">
-        ${Object.keys(driverDetails).length?'↺ Re-upload':'Choose CSV'}
-      </button>
-      <span style="font-size:12px;color:#1b1c1e">
-        ${Object.keys(driverDetails).length
-          ? '✓ '+Object.values(driverDetails).reduce((a,c)=>a+Object.keys(c).length,0)+' drivers loaded'
-          : 'Upload a CSV with driver company details'}
-      </span>
-    </div>
-  </div>`;
-
-  // Per driver invoice cards for active city
-  const city = activeInvoiceCity;
-  const allDrivers = new Set();
-  ALL_DAYS.forEach(day=>{
-    if(!DAY_CITIES[day].includes(city)) return;
-    Object.keys(state[day][city].drivers).forEach(n=>allDrivers.add(n));
+    html+=`<button class="city-tab${city===activeFuelCity?' active':''}" onclick="activeFuelCity='${city}';renderFuelPage()">${CITY_CFG[city].flag} ${city}${has?' 📋':''}</button>`;
   });
-
-  if(!allDrivers.size){
-    html+=`<div class="empty-state"><div class="emoji">🌱</div><p>No drivers loaded for ${city}</p></div>`;
-    main.innerHTML=html; return;
+  html+=`</div>`;
+  if(!hasAny){html+=`<div class="empty-state"><div class="emoji">⛽</div><p>No data loaded yet</p></div>`;cont.innerHTML=html;return;}
+  const city=activeFuelCity;
+  if(!fuelVehicleType[city])fuelVehicleType[city]={};
+  const driverKM={};
+  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;for(const name in state[day][city].drivers){if(!driverKM[name])driverKM[name]=0;driverKM[name]+=state[day][city].drivers[name].totalKm||0;}});
+  html+=`<div class="city-section" style="margin-bottom:16px">
+    <div class="city-section-header"><div class="city-section-title">${CITY_CFG[city].flag} ${city} — Fuel Rates Reference</div><div class="city-section-meta">Reimbursement Rate: 50%</div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Vehicle Type</th><th>Economy (L/100km)</th><th>Base Price ($)</th><th>New Price ($)</th></tr></thead>
+    <tbody><tr><td>Diesel</td><td>13</td><td>$1.90</td><td>$3.04</td></tr><tr><td>Petrol</td><td>16</td><td>$1.80</td><td>$2.50</td></tr></tbody></table></div></div>`;
+  let totalComp=0,rows='';
+  for(const name in driverKM){
+    if(!fuelVehicleType[city][name])fuelVehicleType[city][name]='Diesel';
+    const vt=fuelVehicleType[city][name],r=FUEL_RATES[vt];
+    const km=driverKM[name],litres=(km/100)*r.economy;
+    const comp=(r.newPrice-r.base)*litres*REIMBURSE_RATE;
+    totalComp+=comp;
+    const selId=`fuel-${city}-${name}`.replace(/\s+/g,'-');
+    rows+=`<tr><td>${name}</td><td><select id="${selId}" onchange="setFuelType('${city}','${name}',this.value)" style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1.5px solid var(--border);background:white;cursor:pointer"><option value="Diesel"${vt==='Diesel'?' selected':''}>Diesel</option><option value="Petrol"${vt==='Petrol'?' selected':''}>Petrol</option></select></td><td>${Math.round(km)}</td><td>${fmtMoney(r.base)}</td><td>${fmtMoney(r.newPrice)}</td><td>${fmtNum(litres,1)}</td><td style="font-weight:700">${fmtMoney(comp,0)}</td></tr>`;
   }
+  html+=`<div class="city-section"><div class="city-section-header"><div class="city-section-title">${CITY_CFG[city].flag} ${city} — Weekly Fuel Reimbursement</div><div class="city-section-meta">KM from Estimated CSVs · All days combined</div></div>
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Driver</th><th>Vehicle Type</th><th>KM Driven</th><th>Base Price</th><th>New Price</th><th>Litres Used</th><th>Compensation ($)</th></tr></thead>
+  <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${fmtMoney(totalComp,0)}</td></tr></tfoot></table></div></div>
+  <div class="actions-row"><button class="btn-primary" onclick="exportFuel()">⬇ Export Fuel CSV</button></div>`;
+  cont.innerHTML=html;
+}
+function setFuelType(city,name,value){if(!fuelVehicleType[city])fuelVehicleType[city]={};fuelVehicleType[city][name]=value;renderFuelPage();}
 
-  let invoiceNum = parseInt(invoiceSettings.invoiceStart)||40101;
-  html += `<div class="section-title">Invoice Preview — ${city}</div>`;
-
+// ── INVOICES PAGE ─────────────────────────────────────────────────────────────
+function renderInvoicesPage(){
+  const cont=document.getElementById('invoices-content'); if(!cont)return;
+  if(!invoiceSettings.submittedOn)invoiceSettings.submittedOn=new Date().toISOString().split('T')[0];
+  if(!invoiceSettings.dueDate){const d=new Date(invoiceSettings.submittedOn);d.setDate(d.getDate()+7);invoiceSettings.dueDate=d.toISOString().split('T')[0];}
+  let html=`<div class="city-tabs">`;
+  CITIES.forEach(city=>{const has=ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);html+=`<button class="city-tab${city===activeInvCity?' active':''}" onclick="activeInvCity='${city}';renderInvoicesPage()">${CITY_CFG[city].flag} ${city}${has?' 📋':''}</button>`;});
+  html+=`</div>`;
+  html+=`<div class="city-section" style="margin-bottom:16px"><div class="city-section-header"><div class="city-section-title">🧾 Invoice Settings</div></div>
+  <div style="padding:16px"><div class="config-row" style="margin-bottom:0">
+    <div class="config-card"><label>Submitted On</label><input type="date" value="${invoiceSettings.submittedOn}" onchange="invoiceSettings.submittedOn=this.value;const d=new Date(this.value);d.setDate(d.getDate()+7);invoiceSettings.dueDate=d.toISOString().split('T')[0];renderInvoicesPage()"></div>
+    <div class="config-card"><label>Due Date (auto +7)</label><div class="val" style="font-family:'DM Mono';font-size:13px">${auDate(invoiceSettings.dueDate)}</div></div>
+    <div class="config-card"><label>Invoice # Start</label><input type="text" value="${invoiceSettings.invoiceStart}" onchange="invoiceSettings.invoiceStart=this.value"></div>
+    <div class="config-card"><label>Date From</label><input type="date" value="${invoiceSettings.dateFrom||''}" onchange="invoiceSettings.dateFrom=this.value"></div>
+    <div class="config-card"><label>Date To</label><input type="date" value="${invoiceSettings.dateTo||''}" onchange="invoiceSettings.dateTo=this.value"></div>
+  </div></div></div>
+  <div class="city-section" style="margin-bottom:16px"><div class="city-section-header"><div class="city-section-title">👥 Driver Details CSV</div><div class="city-section-meta">Columns: City, Driver Name, Company Name, Phone, ABN, Address, Email, BSB, Account</div></div>
+  <div style="padding:14px 16px;display:flex;align-items:center;gap:12px">
+    <input type="file" id="driverDetailsFile" accept=".csv" style="display:none" onchange="loadDriverDetails(event)">
+    <button class="upload-btn" style="margin:0" onclick="document.getElementById('driverDetailsFile').click()">${Object.keys(driverDetails).length?'↺ Re-upload':'Choose CSV'}</button>
+    <span style="font-size:12px;color:var(--text-muted)">${Object.keys(driverDetails).length?'✓ '+Object.values(driverDetails).reduce((a,c)=>a+Object.keys(c).length,0)+' drivers loaded':'Upload driver details CSV'}</span>
+  </div></div>`;
+  const city=activeInvCity;
+  const allDrivers=new Set();
+  ALL_DAYS.forEach(day=>{if(DAY_CITIES[day].includes(city))Object.keys(state[day][city].drivers).forEach(n=>allDrivers.add(n));});
+  if(!allDrivers.size){html+=`<div class="empty-state"><div class="emoji">🌱</div><p>No drivers loaded for ${city}</p></div>`;cont.innerHTML=html;return;}
+  html+=`<div class="section-label">Invoice Preview — ${city}</div>`;
+  let invNum=parseInt(invoiceSettings.invoiceStart)||40101;
   allDrivers.forEach(name=>{
-    const det = (driverDetails[city]&&driverDetails[city][name])||{};
-    const invNum = String(invoiceNum).padStart(6,'0');
-    invoiceNum++;
-
-    // collect line items per day
-    const lineItems = [];
+    const det=(driverDetails[city]&&driverDetails[city][name])||{};
+    const num=String(invNum).padStart(6,'0'); invNum++;
+    const lineItems=[];
     ALL_DAYS.forEach(day=>{
-      if(!DAY_CITIES[day].includes(city)) return;
-      const s = state[day][city];
-      if(!s.estLoaded) return;
-      const date = s.date;
-      if(invoiceSettings.dateFrom && date < invoiceSettings.dateFrom) return;
-      if(invoiceSettings.dateTo && date > invoiceSettings.dateTo) return;
-      const d = s.drivers[name]; if(!d) return;
-      const cv = d._c||{};
-      lineItems.push({
-        date, qty: cv.actBoxes||d.stops,
-        unitPrice: cv.finalPerBox||0,
-        additional: cv.bonus||0,
-        total: cv.finalPay||0
-      });
+      if(!DAY_CITIES[day].includes(city))return;
+      const s=state[day][city]; if(!s.estLoaded)return;
+      const date=s.date;
+      if(invoiceSettings.dateFrom&&date<invoiceSettings.dateFrom)return;
+      if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo)return;
+      const d=s.drivers[name]; if(!d)return;
+      const cv=d._c||{};
+      lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:cv.bonus||0,total:cv.finalPay||0});
     });
-
-    if(!lineItems.length) return;
-
-    const subtotal = lineItems.reduce((a,l)=>a+l.total,0);
-    const totalBoxes = lineItems.reduce((a,l)=>a+l.qty,0);
-    const fuelComp = driverFuelComp(name, city);
-    // FR deduction for this driver
-    let frDeduction = 0;
-    const cityTotalPay = Array.from(allDrivers).reduce((a,n2)=>{
-      return a + ALL_DAYS.filter(d=>DAY_CITIES[d].includes(city)).reduce((b,day)=>{
-        return b + ((state[day][city].drivers[n2]?._c?.finalPay)||0);
-      },0);
-    },0);
-    let cityFRDed = 0;
-    ALL_DAYS.forEach(day=>{
-      if(!DAY_CITIES[day].includes(city)) return;
-      const fr=frState[day+'-'+city]||{loaded:false,foodData:{}};
-      const drivers=state[day][city].drivers;
-      for(const n2 in drivers){
-        const cv=drivers[n2]._c||{};
-        const fpb=cv.finalPerBox||0;
-        const fb=fr.loaded?(fr.foodData[n2]||0):(cv.foodBoxes||0);
-        if(fb>0) cityFRDed+=(fpb-5.50)*fb*-1;
-      }
-    });
-    const frRate = cityTotalPay>0?cityFRDed/cityTotalPay:0;
-    frDeduction = subtotal * frRate;
-    const totalDue = subtotal + fuelComp + frDeduction;
-    const gst = totalDue / 11;
-
-    html += `
-    <div class="weekly-day-block" style="margin-bottom:16px">
-      <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-weight:800;font-size:14px">🧾 ${det.company||name} — Invoice #${invNum}</div>
-        <button class="export-btn" style="padding:7px 16px;font-size:12px" onclick="generateInvoicePDF('${name}','${city}','${invNum}')">⬇ Download PDF</button>
+    if(!lineItems.length)return;
+    const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
+    const totBoxes=lineItems.reduce((a,l)=>a+l.qty,0);
+    const fuelComp=driverFuelCompute(name,city);
+    let cityTotalPay=0,cityFRDed=0;
+    allDrivers.forEach(n2=>{ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;cityTotalPay+=(state[day][city].drivers[n2]?._c?.finalPay||0);});});
+    ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;}});
+    const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
+    const frDed=subtotal*frRate;
+    const totalDue=subtotal+fuelComp+frDed;
+    const gst=totalDue/11;
+    html+=`<div class="city-section" style="margin-bottom:14px">
+      <div class="city-section-header">
+        <div class="city-section-title">🧾 ${det.company||name} — Invoice #${num}</div>
+        <button class="btn-primary" style="padding:7px 14px;font-size:12px" onclick="generateInvoicePDF('${name}','${city}','${num}')">⬇ Download PDF</button>
       </div>
-      <div style="padding:16px 20px;background:var(--surface)">
-        <!-- Driver details inline edit -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-          ${['company','phone','abn','address','email','bsb','account'].map(field=>`
-            <div class="config-card" style="padding:10px 14px">
-              <label>${field.toUpperCase()}</label>
-              <input type="text" value="${det[field]||''}"
-                onchange="setDriverDetail('${city}','${name}','${field}',this.value)"
-                placeholder="Enter ${field}">
-            </div>`).join('')}
+      <div style="padding:16px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+          ${['company','phone','abn','address','email','bsb','account'].map(f=>`<div class="config-card" style="padding:10px 12px"><label>${f.toUpperCase()}</label><input type="text" value="${det[f]||''}" onchange="setDriverDetail('${city}','${name}','${f}',this.value)" placeholder="Enter ${f}"></div>`).join('')}
         </div>
-        <!-- Line items preview -->
-        <table class="cs-table" style="margin-bottom:12px">
+        <div class="table-wrap"><table class="data-table" style="margin-bottom:10px">
           <thead><tr><th>Delivery Date</th><th>Qty</th><th>Unit Price</th><th>Additional</th><th>Total</th></tr></thead>
-          <tbody>
-            ${lineItems.map(l=>`<tr>
-              <td>${l.date}</td><td>${l.qty}</td>
-              <td>${l.unitPrice.toFixed(1)}</td>
-              <td>${l.additional?'$'+l.additional.toFixed(2):'0'}</td>
-              <td>${fmtMoney(l.total)}</td>
-            </tr>`).join('')}
-            <tr style="font-weight:700;background:var(--cream)">
-              <td>Subtotal</td><td>${totalBoxes}</td><td>—</td><td>—</td><td>${fmtMoney(subtotal)}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:#1b1c1e">
-          ${fuelComp>0?`<div>⛽ Fuel Compensation &nbsp;<strong style="color:#1b1c1e">+${fmtMoney(fuelComp, 0)}</strong></div>`:''}
-          ${frDeduction<0?`<div>📦 Charity donation pool ${(frRate*100).toFixed(2)}% &nbsp;<strong style="color:#c0392b">${frDeduction.toFixed(2)}</strong></div>`:''}
-          <div style="font-size:16px;font-weight:800;color:var(--olive);margin-top:8px">Total due: ${fmtMoney(totalDue)}</div>
-          <div style="font-size:11px;opacity:0.7">GST inclusive: ${fmtMoney(gst)}</div>
+          <tbody>${lineItems.map(l=>`<tr><td><strong>${auDate(l.date)}</strong></td><td>${l.qty}</td><td>${fmtNum(l.unitPrice,1)}</td><td>${l.additional?fmtMoney(l.additional):'0'}</td><td>${fmtMoney(l.total)}</td></tr>`).join('')}
+          <tr style="font-weight:700;background:var(--bg)"><td>Subtotal</td><td>${totBoxes}</td><td>—</td><td>—</td><td>${fmtMoney(subtotal)}</td></tr></tbody>
+        </table></div>
+        <div style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">
+          ${fuelComp>0?`<div>⛽ Fuel Compensation &nbsp;<strong style="color:var(--text)">${fmtMoney(fuelComp,0)}</strong></div>`:''}
+          ${frDed<0?`<div>📦 Charity donation pool ${(frRate*100).toFixed(2)}% &nbsp;<strong style="color:var(--red)">${fmtNum(frDed)}</strong></div>`:''}
+          <div style="font-size:16px;font-weight:800;color:var(--text);margin-top:8px">Total due: ${fmtMoney(totalDue)}</div>
+          <div style="font-size:11px;opacity:0.6">GST inclusive: ${fmtMoney(gst)}</div>
         </div>
-      </div>
-    </div>`;
+      </div></div>`;
   });
-
-  html += `<div class="actions-row">
-    <button class="export-btn orange" onclick="generateAllInvoices('${city}')">⬇ Download All ${city} Invoices</button>
-  </div>`;
-
-  main.innerHTML = html;
+  html+=`<div class="actions-row"><button class="btn-primary" onclick="generateAllInvoices('${city}')">⬇ Download All ${city} Invoices</button></div>`;
+  cont.innerHTML=html;
 }
 
-function driverFuelComp(name, city){
-  if(!fuelVehicleType[city]) return 0;
-  let km=0;
-  ALL_DAYS.forEach(day=>{
-    if(!DAY_CITIES[day].includes(city)) return;
-    km += state[day][city].drivers[name]?.totalKm||0;
-  });
-  const vtype=(fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
-  const rates=FUEL_RATES[vtype];
-  const litres=(km/100)*rates.economy;
-  return (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
+function driverFuelCompute(name,city){
+  if(!fuelVehicleType[city])return 0;
+  let km=0;ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;km+=state[day][city].drivers[name]?.totalKm||0;});
+  const vt=(fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
+  const r=FUEL_RATES[vt];return(r.newPrice-r.base)*(km/100)*r.economy*REIMBURSE_RATE;
 }
-
-function setDriverDetail(city, name, field, value){
-  if(!driverDetails[city]) driverDetails[city]={};
-  if(!driverDetails[city][name]) driverDetails[city][name]={};
-  driverDetails[city][name][field]=value;
-}
-
+function setDriverDetail(city,name,field,value){if(!driverDetails[city])driverDetails[city]={};if(!driverDetails[city][name])driverDetails[city][name]={};driverDetails[city][name][field]=value;}
 function loadDriverDetails(event){
-  const file=event.target.files[0]; if(!file) return;
+  const file=event.target.files[0]; if(!file)return;
   const reader=new FileReader();
   reader.onload=e=>{
     const rows=parseCSV(e.target.result),h=rows[0],idx=k=>h.indexOf(k);
     driverDetails={};
     for(let i=1;i<rows.length;i++){
-      const r=rows[i];
-      const city=(r[idx('City')]||'').trim();
-      const name=(r[idx('Driver Name')]||'').trim();
-      if(!city||!name) continue;
-      if(!driverDetails[city]) driverDetails[city]={};
-      driverDetails[city][name]={
-        company: r[idx('Company Name')]||'',
-        phone:   r[idx('Phone')]||'',
-        abn:     r[idx('ABN')]||'',
-        address: r[idx('Address')]||'',
-        email:   r[idx('Email')]||'',
-        bsb:     r[idx('BSB')]||'',
-        account: r[idx('Account')]||''
-      };
+      const r=rows[i],city=(r[idx('City')]||'').trim(),name=(r[idx('Driver Name')]||'').trim();
+      if(!city||!name)continue;
+      if(!driverDetails[city])driverDetails[city]={};
+      driverDetails[city][name]={company:r[idx('Company Name')]||'',phone:r[idx('Phone')]||'',abn:r[idx('ABN')]||'',address:r[idx('Address')]||'',email:r[idx('Email')]||'',bsb:r[idx('BSB')]||'',account:r[idx('Account')]||''};
     }
-    renderInvoice();
+    renderInvoicesPage();
   };
   reader.readAsText(file);
 }
 
-function generateInvoicePDF(name, city, invNum){
+function generateInvoicePDF(name,city,invNum){
   const det=(driverDetails[city]&&driverDetails[city][name])||{};
   const submittedOn=invoiceSettings.submittedOn||new Date().toISOString().split('T')[0];
   const dueDate=invoiceSettings.dueDate||'';
-
-  // collect line items
   const lineItems=[];
   ALL_DAYS.forEach(day=>{
-    if(!DAY_CITIES[day].includes(city)) return;
-    const s=state[day][city]; if(!s.estLoaded) return;
+    if(!DAY_CITIES[day].includes(city))return;
+    const s=state[day][city]; if(!s.estLoaded)return;
     const date=s.date;
-    if(invoiceSettings.dateFrom&&date<invoiceSettings.dateFrom) return;
-    if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo) return;
-    const d=s.drivers[name]; if(!d) return;
+    if(invoiceSettings.dateFrom&&date<invoiceSettings.dateFrom)return;
+    if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo)return;
+    const d=s.drivers[name]; if(!d)return;
     const cv=d._c||{};
     lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:cv.bonus||0,total:cv.finalPay||0});
   });
-
   const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
-  const totalBoxes=lineItems.reduce((a,l)=>a+l.qty,0);
-  const fuelComp=driverFuelComp(name,city);
-
-  // FR rate
-  const allDriverNames=new Set();
-  ALL_DAYS.forEach(day=>{ if(DAY_CITIES[day].includes(city)) Object.keys(state[day][city].drivers).forEach(n=>allDriverNames.add(n)); });
+  const totBoxes=lineItems.reduce((a,l)=>a+l.qty,0);
+  const fuelComp=driverFuelCompute(name,city);
+  const allDrivers=new Set();ALL_DAYS.forEach(day=>{if(DAY_CITIES[day].includes(city))Object.keys(state[day][city].drivers).forEach(n=>allDrivers.add(n));});
   let cityTotalPay=0,cityFRDed=0;
-  allDriverNames.forEach(n2=>{
-    ALL_DAYS.forEach(day=>{
-      if(!DAY_CITIES[day].includes(city)) return;
-      cityTotalPay+=(state[day][city].drivers[n2]?._c?.finalPay||0);
-    });
-  });
-  ALL_DAYS.forEach(day=>{
-    if(!DAY_CITIES[day].includes(city)) return;
-    const fr=frState[day+'-'+city]||{};
-    for(const n2 in state[day][city].drivers){
-      const cv=state[day][city].drivers[n2]._c||{};
-      const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);
-      if(fb>0) cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;
-    }
-  });
+  allDrivers.forEach(n2=>{ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;cityTotalPay+=(state[day][city].drivers[n2]?._c?.finalPay||0);});});
+  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;}});
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
-  const frDeduction=subtotal*frRate;
-  const totalDue=subtotal+fuelComp+frDeduction;
+  const frDed=subtotal*frRate;
+  const totalDue=subtotal+fuelComp+frDed;
   const gst=totalDue/11;
-
-  const fmtDate=d=>d?d.split('-').reverse().join('/'):'-';
-
-  const html=`
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');
-    .inv-wrap{font-family:'Sora',Arial,sans-serif;max-width:760px;margin:0 auto;padding:48px;color:#222;font-size:13px}
-    .inv-company{color:#5b4fcf;font-size:22px;font-weight:800;margin-bottom:2px}
-    .inv-dname{color:#5b4fcf;font-size:16px;font-weight:600;margin-bottom:14px}
-    .inv-meta{color:#555;margin-bottom:3px;font-size:13px}
-    .inv-title{font-size:52px;font-weight:900;color:#1a237e;margin:28px 0 4px;line-height:1}
-    .inv-submitted{color:#e91e63;font-weight:700;font-size:15px;margin-bottom:28px}
-    .inv-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:28px}
-    .inv-block-label{font-weight:700;font-size:13px;margin-bottom:8px;color:#222}
-    .inv-block-val{font-size:13px;color:#555;line-height:1.7}
-    hr{border:none;border-top:1px solid #ddd;margin:24px 0}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px}
-    thead th{color:#1a237e;font-weight:700;padding:10px 14px;border-bottom:2px solid #1a237e;text-align:left;font-size:13px}
-    tbody td{padding:10px 14px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333}
-    .inv-subtotal td{font-weight:700;border-top:2px solid #ccc;border-bottom:none;background:#f9f9f9;color:#222}
-    .inv-adj-row{display:flex;justify-content:space-between;padding:6px 14px;font-size:13px;color:#666;font-style:italic}
-    .inv-adj-amt{font-weight:700;font-style:normal}
-    .inv-adj-amt.fuel{color:#1a237e}
-    .inv-adj-amt.charity{color:#c0392b}
-    .inv-total-row{display:flex;justify-content:flex-end;align-items:center;gap:24px;margin-top:16px;padding:0 14px}
-    .inv-total-label{font-size:16px;font-weight:700;color:#444}
-    .inv-total-amt{font-size:28px;font-weight:900;color:#e91e63}
-    .inv-gst{text-align:right;font-size:12px;color:#888;padding:4px 14px}
+  const html=`<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+  .iw{font-family:'Inter',Arial,sans-serif;max-width:760px;margin:0 auto;padding:48px;font-size:13px;color:#222}
+  .ico{color:#5b4fcf;font-size:22px;font-weight:900;margin-bottom:2px}.idn{color:#5b4fcf;font-size:16px;font-weight:600;margin-bottom:14px}
+  .im{color:#555;margin-bottom:3px}.it{font-size:52px;font-weight:900;color:#1a237e;margin:24px 0 4px}
+  .is{color:#e91e63;font-weight:700;font-size:15px;margin-bottom:28px}
+  .ig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:28px}
+  .ibl{font-weight:700;font-size:13px;margin-bottom:8px}.ibv{font-size:13px;color:#555;line-height:1.7}
+  hr{border:none;border-top:1px solid #ddd;margin:24px 0}
+  table{width:100%;border-collapse:collapse}
+  th{color:#1a237e;font-weight:700;padding:10px 14px;border-bottom:2px solid #1a237e;text-align:left;font-size:13px}
+  td{padding:10px 14px;border-bottom:1px solid #f0f0f0;font-size:13px}
+  .st td{font-weight:700;border-top:2px solid #ccc;border-bottom:none;background:#f9f9f9}
+  .adj{display:flex;justify-content:space-between;padding:6px 14px;font-size:13px;color:#666;font-style:italic}
+  .tdr{display:flex;justify-content:flex-end;align-items:center;gap:24px;margin-top:16px;padding:0 14px}
+  .tda{font-size:28px;font-weight:900;color:#e91e63}.gst{text-align:right;font-size:12px;color:#888;padding:4px 14px}
   </style>
-  <div class="inv-wrap">
-    <div class="inv-company">${det.company||name.toUpperCase()+' PTY LTD'}</div>
-    <div class="inv-dname">(${name})</div>
-    <div class="inv-meta">Phone: ${det.phone||'—'}</div>
-    <div class="inv-meta">ABN: &nbsp;${det.abn||'—'}</div>
-    <div class="inv-meta">Address: ${det.address||'—'}</div>
-    <div class="inv-meta">Email: ${det.email||'—'}</div>
-    <div class="inv-title">Invoice</div>
-    <div class="inv-submitted">Submitted on ${fmtDate(submittedOn)}</div>
-    <div class="inv-grid">
-      <div>
-        <div class="inv-block-label">Invoice for</div>
-        <div class="inv-block-val">FUNKY FOOD AU PTY LTD<br>Unit 3/106 Medway Street<br>Rocklea QLD 4106</div>
-      </div>
-      <div>
-        <div class="inv-block-label">Payable to</div>
-        <div class="inv-block-val">${det.company||name}<br>BSB: ${det.bsb||'—'}<br>Account: ${det.account||'—'}</div>
-      </div>
-      <div>
-        <div class="inv-block-label">Invoice #</div>
-        <div class="inv-block-val" style="margin-bottom:12px">${invNum}</div>
-        <div class="inv-block-label">Due date</div>
-        <div class="inv-block-val">${fmtDate(dueDate)}</div>
-      </div>
+  <div class="iw">
+    <div class="ico">${det.company||name.toUpperCase()+' PTY LTD'}</div>
+    <div class="idn">(${name})</div>
+    <div class="im">Phone: ${det.phone||'—'}</div><div class="im">ABN: &nbsp;${det.abn||'—'}</div>
+    <div class="im">Address: ${det.address||'—'}</div><div class="im">Email: ${det.email||'—'}</div>
+    <div class="it">Invoice</div>
+    <div class="is">Submitted on ${auDate(submittedOn)}</div>
+    <div class="ig">
+      <div><div class="ibl">Invoice for</div><div class="ibv">FUNKY FOOD AU PTY LTD<br>Unit 3/106 Medway Street<br>Rocklea QLD 4106</div></div>
+      <div><div class="ibl">Payable to</div><div class="ibv">${det.company||name}<br>BSB: ${det.bsb||'—'}<br>Account: ${det.account||'—'}</div></div>
+      <div><div class="ibl">Invoice #</div><div class="ibv" style="margin-bottom:12px">${invNum}</div><div class="ibl">Due date</div><div class="ibv">${auDate(dueDate)}</div></div>
     </div>
     <hr>
-    <table>
-      <thead><tr>
-        <th>Delivery Date</th><th>Qty</th><th>Unit price</th><th>Additional</th><th style="text-align:right">Total</th>
-      </tr></thead>
-      <tbody>
-        ${lineItems.map(l=>`<tr>
-          <td><strong>${fmtDate(l.date)}</strong></td>
-          <td>${l.qty}</td>
-          <td>${l.unitPrice.toFixed(1)}</td>
-          <td>${l.additional?l.additional.toFixed(2):'0'}</td>
-          <td style="text-align:right">${fmtMoney(l.total)}</td>
-        </tr>`).join('')}
-        <tr class="inv-subtotal">
-          <td>Subtotal</td><td>${totalBoxes}</td><td></td><td></td><td style="text-align:right">${fmtMoney(subtotal)}</td>
-        </tr>
-      </tbody>
-    </table>
-    ${fuelComp>0?`<div class="inv-adj-row"><span><em>Fuel Compensation</em></span><span>Adjustments <span class="inv-adj-amt fuel">${fmtMoney(fuelComp)}</span></span></div>`:''}
-    ${frDeduction<0?`<div class="inv-adj-row"><span><em>Charity donation pool ${(frRate*100).toFixed(2)}%</em></span><span class="inv-adj-amt charity">${frDeduction.toFixed(2)}</span></div>`:''}
-    <div class="inv-total-row">
-      <span class="inv-total-label">Total due</span>
-      <span class="inv-total-amt">${fmtMoney(totalDue)}</span>
-    </div>
-    <div class="inv-gst">GST inclusive: ${fmtMoney(gst)}</div>
+    <table><thead><tr><th>Delivery Date</th><th>Qty</th><th>Unit price</th><th>Additional</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>${lineItems.map(l=>`<tr><td><strong>${auDate(l.date)}</strong></td><td>${l.qty}</td><td>${fmtNum(l.unitPrice,1)}</td><td>${l.additional?fmtMoney(l.additional):'0'}</td><td style="text-align:right">${fmtMoney(l.total)}</td></tr>`).join('')}
+    <tr class="st"><td>Subtotal</td><td>${totBoxes}</td><td></td><td></td><td style="text-align:right">${fmtMoney(subtotal)}</td></tr></tbody></table>
+    ${fuelComp>0?`<div class="adj"><span><em>Fuel Compensation</em></span><span>Adjustments <strong style="color:#1a237e">${fmtMoney(fuelComp,0)}</strong></span></div>`:''}
+    ${frDed<0?`<div class="adj"><span><em>Charity donation pool ${(frRate*100).toFixed(2)}%</em></span><span style="color:#c0392b;font-weight:700">${fmtNum(frDed)}</span></div>`:''}
+    <div class="tdr"><span style="font-size:16px;font-weight:700;color:#444">Total due</span><span class="tda">${fmtMoney(totalDue)}</span></div>
+    <div class="gst">GST inclusive: ${fmtMoney(gst)}</div>
   </div>`;
-
-  // Show invoice in a full-screen modal overlay for printing
-  let modal = document.getElementById('invoiceModal');
-  if(!modal){
-    modal = document.createElement('div');
-    modal.id = 'invoiceModal';
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:20px';
-    document.body.appendChild(modal);
-  }
-  modal.innerHTML = `
-    <div style="width:100%;max-width:800px;margin:0 auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div style="color:white;font-family:'Sora',sans-serif;font-weight:700;font-size:15px">🧾 Invoice #${invNum} — ${name}</div>
-        <div style="display:flex;gap:10px">
-          <button onclick="window.print()" style="background:#2d6a4f;color:white;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button>
-          <button onclick="document.getElementById('invoiceModal').remove()" style="background:#555;color:white;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">✕ Close</button>
-        </div>
+  let modal=document.getElementById('invoiceModal');
+  if(!modal){modal=document.createElement('div');modal.id='invoiceModal';modal.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:20px';document.body.appendChild(modal);}
+  modal.innerHTML=`<div style="width:100%;max-width:800px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="color:white;font-family:'Inter',sans-serif;font-weight:700;font-size:15px">🧾 Invoice #${invNum} — ${name}</div>
+      <div style="display:flex;gap:10px">
+        <button onclick="window.print()" style="background:#2d5a3d;color:white;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button>
+        <button onclick="document.getElementById('invoiceModal').remove()" style="background:#555;color:white;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">✕ Close</button>
       </div>
-      <div id="invoiceContent" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.3)">${html}</div>
-    </div>`;
-
-  // Add print styles
-  let printStyle = document.getElementById('invoicePrintStyle');
-  if(!printStyle){
-    printStyle = document.createElement('style');
-    printStyle.id = 'invoicePrintStyle';
-    document.head.appendChild(printStyle);
-  }
-  printStyle.textContent = '@media print {' +
-    'body > *:not(#invoiceModal) { display: none !important; }' +
-    '#invoiceModal { position:static !important; background:white !important; padding:0 !important; }' +
-    '#invoiceModal > div > div:first-child { display:none !important; }' +
-    '#invoiceContent { box-shadow:none !important; padding:20px !important; border-radius:0 !important; }' +
-    '}';
+    </div>
+    <div id="invoiceContent" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.3)">${html}</div>
+  </div>`;
+  let ps=document.getElementById('invPS');
+  if(!ps){ps=document.createElement('style');ps.id='invPS';document.head.appendChild(ps);}
+  ps.textContent='@media print{body > *:not(#invoiceModal){display:none !important;}#invoiceModal{position:static !important;background:white !important;padding:0 !important;}#invoiceModal > div > div:first-child{display:none !important;}#invoiceContent{box-shadow:none !important;padding:0 !important;border-radius:0 !important;}}';
 }
 
 function generateAllInvoices(city){
   const allDrivers=[];
-  ALL_DAYS.forEach(day=>{ if(DAY_CITIES[day].includes(city)) Object.keys(state[day][city].drivers).forEach(n=>{ if(!allDrivers.includes(n)) allDrivers.push(n); }); });
+  ALL_DAYS.forEach(day=>{if(DAY_CITIES[day].includes(city))Object.keys(state[day][city].drivers).forEach(n=>{if(!allDrivers.includes(n))allDrivers.push(n);});});
   let num=parseInt(invoiceSettings.invoiceStart)||40101;
-  // Show first driver — user can print then close and click next
-  if(allDrivers.length>0){
-    const name=allDrivers[0];
-    const invNum=String(num).padStart(6,'0');
-    generateInvoicePDF(name,city,invNum);
-  }
+  if(allDrivers.length>0)generateInvoicePDF(allDrivers[0],city,String(num).padStart(6,'0'));
 }
 
-buildTabs();
-buildMain();
+// ── EXPORTS ───────────────────────────────────────────────────────────────────
+function exportWeekly(){
+  let csv='Day,City,Date,Driver,Act Boxes,Final Per Box,Bonus & Fines,Final Pay,Driver Speed,6PM Finish\n';
+  ALL_DAYS.forEach(day=>DAY_CITIES[day].filter(c=>state[day][c].estLoaded).forEach(city=>{
+    for(const name in state[day][city].drivers){
+      const cv=state[day][city].drivers[name]._c||{};
+      csv+=[day,city,auDate(state[day][city].date),name,cv.actBoxes||'',cv.finalPerBox?fmtNum(cv.finalPerBox,1):'',cv.bonus||0,cv.finalPay?fmtNum(cv.finalPay):'',cv.speed!=null?Math.round(cv.speed)+'%':'',cv.sixPM||''].join(',')+'\n';
+    }
+  }));
+  dl(csv,'funky-food-weekly-pay.csv');
+}
+function exportFoodRelief(){
+  let csv='Day,City,Date,Driver,Food Relief Boxes,Deduction,Final Per Box,Final Pay,%\n';
+  ALL_DAYS.forEach(day=>DAY_CITIES[day].filter(c=>state[day][c].actLoaded).forEach(city=>{
+    for(const name in state[day][city].drivers){
+      const cv=state[day][city].drivers[name]._c||{};
+      const fr=frState[day+'-'+city]||{};
+      const fb=fr.loaded?(fr.foodData?.[name]||0):(cv.foodBoxes||0);
+      const ded=fb>0?(cv.finalPerBox-5.50)*fb*-1:0;
+      const fp=cv.finalPay||0;
+      csv+=[day,city,auDate(state[day][city].date),name,fb,fmtNum(ded),cv.finalPerBox?fmtNum(cv.finalPerBox,1):'',fp?fmtNum(fp):'',fp>0?((ded/fp)*100).toFixed(2)+'%':''].join(',')+'\n';
+    }
+  }));
+  dl(csv,'funky-food-food-relief.csv');
+}
+function exportFuel(){
+  const city=activeFuelCity;
+  if(!fuelVehicleType[city])fuelVehicleType[city]={};
+  const driverKM={};
+  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;for(const name in state[day][city].drivers){if(!driverKM[name])driverKM[name]=0;driverKM[name]+=state[day][city].drivers[name].totalKm||0;}});
+  let csv='Driver,City,Vehicle Type,KM Driven,Base Price,New Price,Litres Used,Compensation\n';
+  for(const name in driverKM){
+    const vt=fuelVehicleType[city][name]||'Diesel',r=FUEL_RATES[vt];
+    const km=driverKM[name],litres=(km/100)*r.economy,comp=(r.newPrice-r.base)*litres*REIMBURSE_RATE;
+    csv+=[name,city,vt,Math.round(km),r.base,r.newPrice,fmtNum(litres,1),fmtNum(comp,0)].join(',')+'\n';
+  }
+  dl(csv,`funky-food-fuel-${city}.csv`);
+}
+function dl(csv,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+showPage('home');
 </script>
 </body>
 </html>
