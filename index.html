@@ -589,7 +589,13 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
           <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
-          <div class="field-group"><label>Bonus & Fines ($) ✎</label><input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')"></div>
+          <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
+            ${getFixedBonusLabel(day,city,name)
+              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556;font-weight:700">${getFixedBonusLabel(day,city,name)}</div>`
+              : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
+            }
+            ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
+          </div>
         </div>
         <div class="results-strip">
           <div class="result-item"><div class="r-label">Est Pay</div><div class="r-val" id="${key}_${name}_estPay">${c.estPay?'$'+c.estPay.toFixed(2):'—'}</div></div>
@@ -643,13 +649,31 @@ function refreshMain(){ if(activeTab!=='Weekly') buildMain(); }
 function tM(t){if(!t)return null;const p=t.split(':');if(p.length<2)return null;return parseInt(p[0])*60+parseInt(p[1]);}
 function mD(t1,t2){const a=tM(t1),b=tM(t2);if(a===null||b===null)return null;return(b-a)/60;}
 
+// ── FIXED BONUS LABEL ────────────────────────────────────────────────────────
+function getFixedRate(city, name){
+  if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) return 57;
+  return null;
+}
+
+function getFixedBonusLabel(day, city, name){
+  const labels = [];
+  if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
+  if(name==='Angus' && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
+  if(name==='Dasharath' && city==='Melbourne' && day==='Friday') labels.push('+$50.00 (weekly bonus)');
+  if(city==='Sydney') labels.push('+$12.00 (gate fee)');
+  return labels.length ? labels.join(' · ') : null;
+}
+
 // ── COMPUTE ───────────────────────────────────────────────────────────────────
 function compute(day,city,name){
   const d=state[day][city].drivers[name]; if(!d)return;
   const key=`${day}-${city}`;
   const s=state[day][city];
-  const rate  = parseFloat(document.getElementById('rate-'+key)?.value)  || s._rate  || 62;
+  let rate  = parseFloat(document.getElementById('rate-'+key)?.value)  || s._rate  || 62;
   const pbMin = parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5;
+  // ── FIXED RATE OVERRIDES ──────────────────────────────────────────────────
+  if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) rate = 57;
+  // ─────────────────────────────────────────────────────────────────────────
   const estBoxes = d.stops;
   const adj      = parseFloat(document.getElementById(`${key}_${name}_adj`)?.value)||0;
   const actBoxes = parseFloat(document.getElementById(`${key}_${name}_actBoxes`)?.value)||estBoxes;
@@ -1613,7 +1637,8 @@ function loadDriverDetails(event){
         address: r[idx('Address')]||'',
         email:   r[idx('Email')]||'',
         bsb:     r[idx('BSB')]||'',
-        account: r[idx('Account')]||''
+        account: r[idx('Account')]||'',
+        gst:     r[idx('GST')]||'GST Valid'
       };
     }
     renderInvoice();
@@ -1664,8 +1689,10 @@ function generateInvoicePDF(name, city, invNum){
   });
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
   const frDeduction=subtotal*frRate;
-  const totalDue=subtotal+fuelComp+frDeduction;
-  const gst=totalDue/11;
+  const isGSTInvalid=(det.gst||'').toUpperCase().includes('INVALID');
+  const gstRemoval=isGSTInvalid?subtotal/11:0;
+  const totalDue=subtotal-gstRemoval+fuelComp+frDeduction;
+  const gst=isGSTInvalid?0:totalDue/11;
 
   const fmtDate=d=>d?d.split('-').reverse().join('/'):'-';
 
