@@ -283,8 +283,9 @@
     <button class="week-arrow" id="weekNext" onclick="navigateWeek(1)" disabled>›</button>
   </div>
   <div class="week-nav-right">
-    <span class="archive-count" id="archiveCount"></span>
+
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
+    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1.5px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
   </div>
 </div>
 <main id="mainContent"></main>
@@ -392,12 +393,37 @@ function updateWeekNav(){
   else prev.disabled = viewingArchiveIndex <= 0;
   next.disabled = viewingArchiveIndex < 0;
 
-  count.textContent = weekArchive.length > 0 ? weekArchive.length+' saved week'+(weekArchive.length>1?'s':'') : '';
+  // archive count hidden
 
   // disable save btn when viewing archive
   // Save Week always enabled
   const saveBtn = document.querySelector('.save-week-btn');
   if(saveBtn){ saveBtn.disabled = false; saveBtn.style.opacity = '1'; }
+}
+
+function startNewWeek(){
+  const hasData = ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
+  if(hasData){
+    if(!confirm('This will clear ALL uploaded CSVs and data for all days and cities.\n\nMake sure you have saved the current week first!\n\nContinue?')) return;
+  }
+  // Clear all state
+  ALL_DAYS.forEach(day=>{
+    DAY_CITIES[day].forEach(city=>{
+      const today=new Date(), diff=(today.getDay()-DAY_NUMS[day]+7)%7;
+      const d=new Date(today); d.setDate(today.getDate()-diff);
+      state[day][city]={drivers:{},date:d.toISOString().split('T')[0],estLoaded:false,actLoaded:false,_totals:{}};
+    });
+  });
+  // Reset other state
+  Object.keys(frState).forEach(k=>delete frState[k]);
+  Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
+  invoiceSettings={submittedOn:'',invoiceStart:'040101',dueDate:''};
+  viewingArchiveIndex=-1;
+  activeTab='Tuesday';
+  buildTabs();
+  buildMain();
+  updateWeekNav();
+  alert('✅ All cleared! Ready for a new week.');
 }
 
 function saveCurrentWeek(){
@@ -887,7 +913,7 @@ function compute(day,city,name){
   })();
   sR(`${key}_${name}_6pm`, sixPM, sixPMClass);
 
-  d._c={...d._c,actBoxes,estPay,estPerBox,finalPerBox,bonus,adj,finalPay,speed,sixPM,finalHourly,timeTaken,_actFirst:actFirst,_actLast:actLast,foodBoxes,foodDeduction};
+  d._c={...d._c,actBoxes,estPay,estPerBox,finalPerBox,bonus,adj,fixedBonus,finalPay,speed,sixPM,finalHourly,timeTaken,_actFirst:actFirst,_actLast:actLast,foodBoxes,foodDeduction};
 
   // update totals
   let tB=0,tE=0,tF=0;
@@ -1817,7 +1843,7 @@ function generateInvoicePDF(name, city, invNum){
     if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo) return;
     const d=s.drivers[name]; if(!d) return;
     const cv=d._c||{};
-    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:cv.bonus||0,total:cv.finalPay||0});
+    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
   });
 
   const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
@@ -2021,7 +2047,7 @@ function buildInvoiceHTML(name,city,invNum){
     if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo)return;
     const d=s.drivers[name]; if(!d)return;
     const cv=d._c||{};
-    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:cv.bonus||0,total:cv.finalPay||0});
+    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
   });
   if(!lineItems.length) return null;
   const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
