@@ -1990,6 +1990,7 @@ function generateAllInvoices(city){
         <div style="color:white;font-family:'Sora',sans-serif;font-weight:700;font-size:14px">🧾 All ${city} Invoices (${invoices.length} drivers)</div>
         <div style="display:flex;gap:8px">
           <button onclick="window.print()" style="background:#2d5a3d;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">🖨 Print This Invoice</button>
+          <button onclick="sendAllToDEXT()" style="background:#1a237e;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">📤 Send All to DEXT</button>
           <button onclick="document.getElementById('invoiceModal').remove()" style="background:#555;color:white;border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">✕ Close</button>
         </div>
       </div>
@@ -2075,6 +2076,31 @@ function buildInvoiceHTML(name,city,invNum){
     <div class="inv-total-row"><span class="inv-total-label">Total due</span><span class="inv-total-amt">${fmtMoney(totalDue)}</span></div>
     <div class="inv-gst">${isGSTInvalid?'<span style="color:#c0392b">GST Invalid — GST removed from subtotal</span>':'GST inclusive: '+fmtMoney(gst)}</div>
   </div>`;
+}
+
+// ── DEXT EMAIL ────────────────────────────────────────────────────────────────
+function sendToDEXT(){
+  // Single invoice — get current driver name and invoice number from modal title
+  const title = document.querySelector('#invoiceModal .inv-company')?.textContent || 'Invoice';
+  const subject = encodeURIComponent('Invoice — ' + title);
+  const body = encodeURIComponent(
+    'Hi DEXT,\n\nPlease find the attached invoice for processing.\n\nThank you!'
+  );
+  window.location.href = 'mailto:ko.ff@dext.cc?subject='+subject+'&body='+body;
+  setTimeout(()=>{
+    alert('📧 Your email app should have opened!\n\nPlease attach the PDF invoice before sending.\n\nTip: Use 🖨 Print / Save PDF first to save it, then attach it to the email!');
+  }, 500);
+}
+
+function sendAllToDEXT(){
+  const subject = encodeURIComponent('Weekly Driver Invoices — Funky Food');
+  const body = encodeURIComponent(
+    'Hi DEXT,\n\nPlease find attached all driver invoices for this week for processing.\n\nThank you!'
+  );
+  window.location.href = 'mailto:ko.ff@multiple.dext.cc?subject='+subject+'&body='+body;
+  setTimeout(()=>{
+    alert('📧 Your email app should have opened!\n\nPlease attach all PDF invoices before sending.\n\nTip: Print / Save each invoice as PDF first, then attach them all to this one email!');
+  }, 500);
 }
 
 loadArchiveFromStorage();
