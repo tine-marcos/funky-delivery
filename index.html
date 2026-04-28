@@ -230,6 +230,33 @@
   .city-subtab .subtab-status { font-size: 10px; opacity: 0.7; }
 
   @media (max-width:640px) { main { padding:14px; } header,.tabs-bar { padding-left:14px;padding-right:14px; } .fields-grid { grid-template-columns: 1fr 1fr; } }
+
+  /* ── WEEK NAVIGATOR ── */
+  .week-nav {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 10px 32px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 128px; z-index: 98;
+  }
+  .week-nav-center { display: flex; align-items: center; gap: 12px; }
+  .week-arrow {
+    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border);
+    background: var(--surface); cursor: pointer; display: flex; align-items: center;
+    justify-content: center; font-size: 14px; color: var(--text-muted); transition: all 0.15s;
+  }
+  .week-arrow:hover { border-color: var(--olive); color: var(--olive); }
+  .week-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+  .week-label { font-size: 14px; font-weight: 700; color: var(--text); min-width: 160px; text-align: center; }
+  .week-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .week-badge.current { background: var(--olive-pale); color: var(--olive); }
+  .week-badge.archived { background: var(--cream-dark); color: var(--text-muted); }
+  .week-nav-right { display: flex; align-items: center; gap: 8px; }
+  .save-week-btn {
+    background: var(--olive); color: white; border: none; padding: 7px 16px;
+    border-radius: 8px; font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .save-week-btn:hover { background: var(--olive-light); }
+  .archive-count { font-size: 11px; color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -246,6 +273,20 @@
 </header>
 
 <div class="tabs-bar" id="tabsBar"></div>
+<div class="week-nav" id="weekNav">
+  <div class="week-nav-center">
+    <button class="week-arrow" id="weekPrev" onclick="navigateWeek(-1)">‹</button>
+    <div>
+      <span class="week-label" id="weekLabel">Current Week</span>
+      <span class="week-badge current" id="weekBadge">CURRENT</span>
+    </div>
+    <button class="week-arrow" id="weekNext" onclick="navigateWeek(1)" disabled>›</button>
+  </div>
+  <div class="week-nav-right">
+    <span class="archive-count" id="archiveCount"></span>
+    <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
+  </div>
+</div>
 <main id="mainContent"></main>
 
 <script>
@@ -280,6 +321,9 @@ let activeWeeklyCity = 'Brisbane';
 let activeFRCity = 'Brisbane';
 let activeFuelCity = 'Brisbane';
 let activeInvoiceCity = 'Brisbane';
+let weekArchive = []; // array of saved week snapshots
+let viewingArchiveIndex = -1; // -1 = current week, 0+ = archived week index
+let archivedState = null; // holds the state when viewing an archive
 let driverDetails = {}; // driverDetails[city][name] = {company,phone,abn,address,email,bsb,account}
 let invoiceSettings = { submittedOn:'', invoiceStart:'040101', dueDate:'' };
 const fuelVehicleType = {}; // fuelVehicleType[city][name] = 'Diesel'|'Petrol'
@@ -310,6 +354,113 @@ function setTuesdayDate(city, tuesdayVal){
 }
 
 document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+
+// ── WEEK ARCHIVE ─────────────────────────────────────────────────────────────
+function getWeekLabel(tuesdayDate){
+  if(!tuesdayDate) return 'Current Week';
+  const start = new Date(tuesdayDate);
+  const end = new Date(tuesdayDate); end.setDate(start.getDate()+4);
+  const fmt = d => d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  return fmt(start)+' – '+fmt(end);
+}
+
+function updateWeekNav(){
+  const isArchive = viewingArchiveIndex >= 0;
+  const label = document.getElementById('weekLabel');
+  const badge = document.getElementById('weekBadge');
+  const prev = document.getElementById('weekPrev');
+  const next = document.getElementById('weekNext');
+  const count = document.getElementById('archiveCount');
+  if(!label) return;
+
+  if(isArchive){
+    const snap = weekArchive[viewingArchiveIndex];
+    label.textContent = snap.label;
+    badge.textContent = 'ARCHIVED';
+    badge.className = 'week-badge archived';
+  } else {
+    // get tuesday date from current state
+    const tueDates = CITIES.map(c=>state['Tuesday'][c]?.date).filter(Boolean);
+    label.textContent = tueDates.length ? getWeekLabel(tueDates[0]) : 'Current Week';
+    badge.textContent = 'CURRENT';
+    badge.className = 'week-badge current';
+  }
+
+  prev.disabled = viewingArchiveIndex <= 0 && weekArchive.length === 0;
+  if(viewingArchiveIndex < 0) prev.disabled = weekArchive.length === 0;
+  else prev.disabled = viewingArchiveIndex <= 0;
+  next.disabled = viewingArchiveIndex < 0;
+
+  count.textContent = weekArchive.length > 0 ? weekArchive.length+' saved week'+(weekArchive.length>1?'s':'') : '';
+
+  // disable save btn when viewing archive
+  const saveBtn = document.querySelector('.save-week-btn');
+  if(saveBtn){ saveBtn.disabled = isArchive; saveBtn.style.opacity = isArchive ? '0.4' : '1'; }
+}
+
+function saveCurrentWeek(){
+  // snapshot current state
+  const tueDates = CITIES.map(c=>state['Tuesday'][c]?.date).filter(Boolean);
+  const label = tueDates.length ? getWeekLabel(tueDates[0]) : 'Week '+( weekArchive.length+1);
+
+  // confirm
+  if(!confirm('Save "'+label+'" to archive? You can still view it later.')) return;
+
+  const snapshot = {
+    label,
+    savedAt: new Date().toISOString(),
+    state: JSON.parse(JSON.stringify(state)),
+    frState: JSON.parse(JSON.stringify(frState)),
+    fuelVehicleType: JSON.parse(JSON.stringify(fuelVehicleType)),
+    invoiceSettings: JSON.parse(JSON.stringify(invoiceSettings)),
+  };
+
+  // save to localStorage
+  try {
+    weekArchive.unshift(snapshot); // newest first
+    localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive));
+    alert('✅ Week saved! You can now clear data and start a new week.');
+    updateWeekNav();
+  } catch(e) {
+    alert('Could not save — storage may be full.');
+  }
+}
+
+function navigateWeek(dir){
+  if(dir === -1){
+    // go back in time (older archives)
+    if(viewingArchiveIndex < 0) viewingArchiveIndex = 0;
+    else viewingArchiveIndex = Math.min(viewingArchiveIndex+1, weekArchive.length-1);
+  } else {
+    // go forward (newer / current)
+    if(viewingArchiveIndex <= 0) viewingArchiveIndex = -1;
+    else viewingArchiveIndex--;
+  }
+
+  if(viewingArchiveIndex >= 0){
+    // viewing archive — restore snapshot state for display
+    const snap = weekArchive[viewingArchiveIndex];
+    archivedState = snap.state;
+    // temporarily swap state
+    Object.assign(state, JSON.parse(JSON.stringify(snap.state)));
+    Object.assign(frState, JSON.parse(JSON.stringify(snap.frState)));
+    Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(snap.fuelVehicleType)));
+  } else {
+    // back to current — but we don't restore since current was never replaced
+    // just rebuild from current state
+    archivedState = null;
+  }
+
+  updateWeekNav();
+  buildMain();
+}
+
+function loadArchiveFromStorage(){
+  try {
+    const saved = localStorage.getItem('funkyDeliveryArchive');
+    if(saved) weekArchive = JSON.parse(saved);
+  } catch(e) { weekArchive = []; }
+}
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function buildTabs() {
@@ -1821,8 +1972,10 @@ function generateAllInvoices(city){
   }
 }
 
+loadArchiveFromStorage();
 buildTabs();
 buildMain();
+updateWeekNav();
 </script>
 </body>
 </html>
