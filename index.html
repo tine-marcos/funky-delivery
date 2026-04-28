@@ -351,6 +351,7 @@ function setTuesdayDate(city, tuesdayVal){
     CITIES.forEach(c => { if(state[day][c]) state[day][c].date = iso; });
   });
   buildMain();
+  updateWeekNav(); // refresh date range label
 }
 
 document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
