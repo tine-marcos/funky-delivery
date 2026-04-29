@@ -78,8 +78,10 @@
   }
   .tab-btn:hover { color: #1b1c1e; }
   .tab-btn.active { color: #569556; border-bottom-color: #569556; }
-  .tab-btn.weekly-tab { margin-left: auto; color: var(--text-muted); }
+  .tab-btn.weekly-tab { margin-left: auto; margin-right: auto; color: var(--text-muted); }
+  .tab-btn.right-group { color: var(--text-muted); }
   .tab-btn.weekly-tab.active { color: #1b1c1e; border-bottom-color: #1b1c1e; }
+  .tab-btn.right-group.active { color: #1b1c1e; border-bottom-color: #1b1c1e; }
   .tab-dots { display: flex; gap: 3px; align-items: center; }
   .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.2s; }
   .tab-dot.loaded.brisbane  { background: var(--brisbane); }
@@ -231,6 +233,31 @@
 
   @media (max-width:640px) { main { padding:14px; } header,.tabs-bar { padding-left:14px;padding-right:14px; } .fields-grid { grid-template-columns: 1fr 1fr; } }
 
+  /* ── PAY PREVIEW CARDS ── */
+  .preview-grid { display: flex; flex-direction: column; gap: 14px; }
+  .preview-card {
+    background: white; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--border);
+    max-width: 420px;
+  }
+  .preview-header {
+    background: var(--olive); color: white;
+    padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .preview-driver { font-size: 15px; font-weight: 800; }
+  .preview-zone { font-family: 'DM Mono', monospace; font-size: 12px; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 20px; }
+  .preview-day { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+  .preview-body { padding: 16px 18px; }
+  .preview-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .preview-row:last-child { border-bottom: none; }
+  .preview-label { color: #666; font-size: 12px; }
+  .preview-value { font-family: 'Sora', sans-serif; font-weight: 400; color: #1b1c1e; text-align: right; font-size: 13px; }
+  .preview-value.highlight { color: #1b1c1e; font-weight: 400; }
+  .preview-value.total { color: #1b1c1e; font-size: 14px; font-weight: 600; }
+  .preview-calc { font-size: 11px; color: #888; font-family: 'Sora', sans-serif; margin-top: 2px; }
+  .preview-divider { height: 1px; background: #eee; margin: 8px 0; }
+  .preview-footer { background: var(--cream); padding: 10px 18px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
+
   /* ── WEEK NAVIGATOR ── */
   .week-nav {
     background: var(--surface); border-bottom: 1px solid var(--border);
@@ -261,7 +288,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBR1iV_Pv2xVFqFhc5DzkRyI2qev3rXimM",
@@ -275,7 +302,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     window._db = db;
-    window._firestoreFns = { doc, setDoc, getDocs, collection, orderBy, query };
+    window._firestoreFns = { doc, setDoc, getDoc, getDocs, collection, orderBy, query };
     window._firebaseReady = true;
     console.log('Firebase connected!');
   </script>
@@ -575,6 +602,126 @@ async function loadArchiveFromStorage(){
   buildMain();
 }
 
+// ── PAY PREVIEW ──────────────────────────────────────────────────────────────
+function renderPayPreview(){
+  const main = document.getElementById('mainContent');
+  const hasAny = ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
+  if(!hasAny){
+    main.innerHTML=`<div class="empty-state"><div class="emoji">📋</div><p>No data loaded yet</p><small>Upload Estimated CSVs in the day tabs first</small></div>`;
+    return;
+  }
+
+  // City sub-tabs
+  if(!activeCity['Preview']) activeCity['Preview'] = 'Brisbane';
+  const previewCity = activeCity['Preview'];
+  let html = `<div class="city-subtabs" style="margin-bottom:16px">`;
+  CITIES.forEach(city=>{
+    const has = ALL_DAYS.some(day=>DAY_CITIES[day].includes(city)&&state[day][city].estLoaded);
+    html += `<button class="city-subtab${city===previewCity?' active':''}" onclick="activeCity['Preview']='${city}';renderPayPreview()">${city}</button>`;
+  });
+  html += `</div>`;
+
+  // Day sub-tabs
+  if(!activeCity['PreviewDay']) activeCity['PreviewDay'] = 'Tuesday';
+  const previewDay = activeCity['PreviewDay'];
+  const availDays = ALL_DAYS.filter(day=>DAY_CITIES[day].includes(previewCity)&&state[day][previewCity].estLoaded);
+  if(!availDays.length){
+    html+=`<div class="empty-state"><div class="emoji">🌱</div><p>No data loaded for ${previewCity}</p></div>`;
+    main.innerHTML=html; return;
+  }
+
+  html+=`<div class="city-subtabs" style="margin-bottom:20px">`;
+  availDays.forEach(day=>{
+    html+=`<button class="city-subtab${day===previewDay?' active':''}" onclick="activeCity['PreviewDay']='${day}';renderPayPreview()">${day}</button>`;
+  });
+  html+=`</div>`;
+
+  const s = state[previewDay][previewCity];
+  if(!s||!s.estLoaded){
+    html+=`<div class="empty-state"><div class="emoji">🌱</div><p>No data for ${previewCity} — ${previewDay}</p></div>`;
+    main.innerHTML=html; return;
+  }
+
+  html+=`<div class="preview-grid">`;
+
+  for(const name in s.drivers){
+    const d = s.drivers[name];
+    const cv = d._c||{};
+    const det = (driverDetails[previewCity]&&driverDetails[previewCity][name])||{};
+    const zone = det.zone||'—';
+    const rate = getFixedRate(previewCity,name)||s._rate||62;
+    const estHrs = d.depotStart&&d.depotEnd ? ((tM(d.depotEnd)-tM(d.depotStart))/60) : 0;
+    const estPay = cv.estPay||0;
+    const estPerBox = cv.estPerBox||0;
+    const finalPerBox = cv.finalPerBox||0;
+    const actBoxes = cv.actBoxes||d.stops;
+    const fixedBonus = cv.fixedBonus||0;
+    const bonus = cv.bonus||0;
+    const totalBonus = fixedBonus+bonus;
+    const finalPay = cv.finalPay||0;
+    const startTime = d.depotStart||'—';
+    const estLastStop = d.depotEnd||'—';
+
+    // fixed bonus label
+    let bonusLabel = '';
+    if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
+    else if(name==='Angus'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
+    else if(name==='Dasharath'&&previewCity==='Melbourne'&&previewDay==='Friday') bonusLabel='Weekly bonus';
+    else if(previewCity==='Sydney') bonusLabel='Gate fee';
+
+    html+=`<div class="preview-card">
+      <div class="preview-header">
+        <div>
+          <div class="preview-driver">${name}</div>
+          <div class="preview-day">${previewCity} · ${previewDay} · ${auDate(s.date)}</div>
+        </div>
+        <div class="preview-zone">ZONE ${zone}</div>
+      </div>
+      <div class="preview-body">
+        <div class="preview-row">
+          <div><div class="preview-label">Estimated time</div><div class="preview-calc">${estHrs.toFixed(2)} hrs × $${rate}/hr = ${fmtMoney(estPay)}</div></div>
+          <div class="preview-value highlight">${estHrs.toFixed(2)} hrs</div>
+        </div>
+        <div class="preview-row">
+          <div><div class="preview-label">Est pay per box</div><div class="preview-calc">${fmtMoney(estPay)} ÷ ${d.stops} boxes = ${fmtMoney(estPerBox,1)}</div></div>
+          <div class="preview-value highlight">${fmtMoney(finalPerBox,1)}/box</div>
+        </div>
+        <div class="preview-row">
+          <div><div class="preview-label">Est # boxes</div></div>
+          <div class="preview-value">${d.stops}</div>
+        </div>
+        <div class="preview-row">
+          <div><div class="preview-label">Est total pay</div><div class="preview-calc">${fmtMoney(finalPerBox,1)} × ${d.stops} boxes</div></div>
+          <div class="preview-value highlight">${fmtMoney(finalPerBox*d.stops)}</div>
+        </div>
+        ${totalBonus>0?`<div class="preview-row">
+          <div><div class="preview-label">Additional${bonusLabel?' ('+bonusLabel+')':''}</div></div>
+          <div class="preview-value highlight">+${fmtMoney(totalBonus)}</div>
+        </div>`:''}
+        <div class="preview-divider"></div>
+        <div class="preview-row">
+          <div><div class="preview-label" style="font-weight:700;color:#1b1c1e">Estimated Total Pay</div></div>
+          <div class="preview-value total">${fmtMoney(finalPay)}</div>
+        </div>
+      </div>
+      <div class="preview-footer" style="flex-direction:column;gap:5px">
+        <div style="display:flex;justify-content:space-between">
+          <span>Start time</span><span>${d.depotStart||'—'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span>Estimated last stop time</span><span>${d.estLastTime||'—'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span>Estimated finish time</span><span>${d.depotEnd||'—'}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  html+=`</div>`;
+  main.innerHTML=html;
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function buildTabs() {
   const bar = document.getElementById('tabsBar');
@@ -594,20 +741,25 @@ function buildTabs() {
   w.innerHTML = '⚡️&nbsp; Weekly Summary';
   bar.appendChild(w);
   const fr = document.createElement('button');
-  fr.className = 'tab-btn weekly-tab' + (activeTab==='FoodRelief'?' active':'');
+  fr.className = 'tab-btn right-group' + (activeTab==='FoodRelief'?' active':'');
   fr.id = 'tab-FoodRelief'; fr.onclick = () => switchTab('FoodRelief');
   fr.innerHTML = '📦&nbsp; Food Relief';
   bar.appendChild(fr);
   const fu = document.createElement('button');
-  fu.className = 'tab-btn weekly-tab' + (activeTab==='Fuel'?' active':'');
+  fu.className = 'tab-btn right-group' + (activeTab==='Fuel'?' active':'');
   fu.id = 'tab-Fuel'; fu.onclick = () => switchTab('Fuel');
   fu.innerHTML = '⛽&nbsp; Fuel';
   bar.appendChild(fu);
   const inv = document.createElement('button');
-  inv.className = 'tab-btn weekly-tab' + (activeTab==='Invoice'?' active':'');
+  inv.className = 'tab-btn right-group' + (activeTab==='Invoice'?' active':'');
   inv.id = 'tab-Invoice'; inv.onclick = () => switchTab('Invoice');
   inv.innerHTML = '🧾&nbsp; Invoices';
   bar.appendChild(inv);
+  const prev = document.createElement('button');
+  prev.className = 'tab-btn right-group' + (activeTab==='Preview'?' active':'');
+  prev.id = 'tab-Preview'; prev.onclick = () => switchTab('Preview');
+  prev.innerHTML = '📋&nbsp; Pay Preview';
+  bar.appendChild(prev);
 }
 
 function updateDot(day, city) {
@@ -625,6 +777,7 @@ function buildMain() {
   if (activeTab === 'FoodRelief') { main.innerHTML = ''; renderFoodRelief(); return; }
   if (activeTab === 'Fuel') { main.innerHTML = ''; renderFuel(); return; }
   if (activeTab === 'Invoice') { main.innerHTML = ''; renderInvoice(); return; }
+  if (activeTab === 'Preview') { main.innerHTML = ''; renderPayPreview(); return; }
   const day = activeTab;
   const cities = DAY_CITIES[day];
 
@@ -762,12 +915,14 @@ function loadEst(day,city,file){
       const r=rows[i],name=r[idx('Driver Name')],stop=parseInt(r[idx('Stop Number')]);
       const startAt=r[idx('Start at')]||'',km=parseFloat(r[idx('Distance(km)')])||0;
       if(!name)continue;
-      if(!drivers[name])drivers[name]={name,stops:0,depotStart:null,depotEnd:null,totalKm:0,_c:{}};
+      if(!drivers[name])drivers[name]={name,stops:0,depotStart:null,depotEnd:null,totalKm:0,estLastTime:null,_c:{}};
       const d=drivers[name];
       if(stop===0){d.depotStart=startAt;continue;}
       if(stop===999){d.depotEnd=startAt;continue;}
       d.totalKm+=km;
       d.stops++;
+      const finishBy=r[idx('Finish by')]||'';
+      if(finishBy)d.estLastTime=finishBy;
     }
     Object.keys(drivers).forEach(n=>{if(!drivers[n].depotStart)delete drivers[n];});
     const s=state[day][city];
@@ -1882,6 +2037,38 @@ function setDriverDetail(city, name, field, value){
   driverDetails[city][name][field]=value;
 }
 
+async function saveDriverDetailsToFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'driverDetails'), { data: JSON.stringify(driverDetails), updatedAt: new Date().toISOString() });
+      console.log('Driver details saved to Firebase!');
+    }
+    // Also save to localStorage as backup
+    localStorage.setItem('funkyDriverDetails', JSON.stringify(driverDetails));
+  } catch(e){ console.error('Could not save driver details:', e); }
+}
+
+async function loadDriverDetailsFromFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'driverDetails'));
+      if(snap.exists()){
+        driverDetails = JSON.parse(snap.data().data);
+        console.log('Driver details loaded from Firebase!');
+        renderInvoice();
+        return;
+      }
+    }
+  } catch(e){ console.error('Firebase load error:', e); }
+  // Fallback to localStorage
+  try {
+    const saved = localStorage.getItem('funkyDriverDetails');
+    if(saved){ driverDetails = JSON.parse(saved); renderInvoice(); }
+  } catch(e){}
+}
+
 function loadDriverDetails(event){
   const file=event.target.files[0]; if(!file) return;
   const reader=new FileReader();
@@ -1902,9 +2089,12 @@ function loadDriverDetails(event){
         email:   r[idx('Email')]||'',
         bsb:     r[idx('BSB')]||'',
         account: r[idx('Account')]||'',
-        gst:     r[idx('GST')]||'GST Valid'
+        gst:     r[idx('GST')]||'GST Valid',
+        zone:    r[idx('ZONE')]||''
       };
     }
+    // Save to Firebase permanently
+    saveDriverDetailsToFirebase();
     renderInvoice();
   };
   reader.readAsText(file);
@@ -2214,6 +2404,8 @@ function sendAllToDEXT(){
 
 // Firebase loads async — buildTabs and buildMain called inside loadArchiveFromStorage
 loadArchiveFromStorage();
+// Load driver details from Firebase automatically
+setTimeout(()=>loadDriverDetailsFromFirebase(), 1000);
 </script>
 </body>
 </html>
