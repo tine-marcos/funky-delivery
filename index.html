@@ -106,7 +106,7 @@
   .city-header.brisbane  { background: var(--brisbane);  color: white; }
   .city-header.melbourne { background: var(--melbourne); color: white; }
   .city-header.sydney    { background: var(--sydney);    color: white; }
-  .city-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
+  .city-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; letter-spacing: -0.3px; }
   .city-pill { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.18); padding: 3px 10px; border-radius: 20px; font-weight: 400; }
   .city-status { font-size: 11px; opacity: 0.8; }
   .city-chevron { font-size: 11px; opacity: 0.65; transition: transform 0.2s; }
@@ -125,7 +125,7 @@
   .upload-card.locked { opacity: 0.38; pointer-events: none; }
   .upload-card.done { border-style: solid; border-color: var(--olive-light); background: var(--olive-pale); }
   .upload-icon { font-size: 26px; margin-bottom: 7px; }
-  .upload-card h3 { font-size: 12px; font-weight: 700; margin-bottom: 3px; color: #1b1c1e; }
+  .upload-card h3 { font-size: 12px; font-weight: 500; margin-bottom: 3px; color: #1b1c1e; }
   .upload-card p { font-size: 11px; color: var(--text-muted); }
   .upload-card input { display: none; }
   .upload-btn {
@@ -139,24 +139,24 @@
   /* ── CONFIG ── */
   .config-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
   .config-card { background: var(--cream); border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 140px; border: 1px solid var(--border); }
-  .config-card label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #5a5a5a; margin-bottom: 6px; }
+  .config-card label { display: block; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; color: #5a5a5a; margin-bottom: 6px; }
   .config-card input { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-family: 'DM Mono', monospace; font-size: 13px; background: white; outline: none; color: var(--text); }
   .config-card input:focus { border-color: var(--olive-light); }
 
   /* ── SECTION TITLE ── */
-  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #5a5a5a; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .section-title { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; color: #5a5a5a; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
   .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
   /* ── DRIVER CARDS ── */
   .drivers-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
   .driver-card { background: white; border-radius: 11px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: 0 1px 6px rgba(30,58,47,0.05); }
   .driver-header { background: var(--olive-mid); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
-  .driver-name { font-size: 13px; font-weight: 700; color: white; }
+  .driver-name { font-size: 13px; font-weight: 500; color: white; }
   .driver-stops { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.15); padding: 2px 9px; border-radius: 12px; }
   .driver-body { padding: 14px; }
   .fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 9px; margin-bottom: 11px; }
   .field-group { display: flex; flex-direction: column; gap: 3px; }
-  .field-group label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
+  .field-group label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
   .field-group .val { font-family: 'DM Mono', monospace; font-size: 12px; background: var(--cream); border: 1.5px solid var(--border); border-radius: 6px; padding: 5px 8px; color: #1b1c1e; }
   .field-group input[type="number"], .field-group input[type="time"] { font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; border: 1.5px solid var(--olive-light); border-radius: 6px; padding: 5px 8px; outline: none; width: 100%; color: var(--text); }
   .field-group input:focus { box-shadow: 0 0 0 3px rgba(74,124,89,0.15); }
@@ -166,21 +166,23 @@
   /* ── RESULTS ── */
   .results-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 7px; background: var(--cream); border-radius: 9px; padding: 11px; border: 1px solid var(--border); }
   .result-item { display: flex; flex-direction: column; gap: 2px; }
-  .r-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #5a5a5a; }
-  .r-val { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: #1b1c1e; }
-  .r-val.warn { color: #e07a2f; } .r-val.bad { color: #c0392b !important; font-weight: 700; } .r-val.ok { color: #569556; }
+  .r-label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.5px; color: #5a5a5a; }
+  .r-val { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: #1b1c1e; }
+  .r-val.warn { color: #e07a2f; } .r-val.bad { color: #c0392b !important; font-weight: 400; } .r-val.ok { color: #569556; }
 
   /* ── CITY SUMMARY ── */
   .city-summary { border-radius: 10px; overflow: hidden; margin-top: 18px; border: 1px solid var(--border); }
-  .cs-head { padding: 10px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+  .cs-head { padding: 10px 16px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
   .cs-head.brisbane  { background: var(--brisbane-light);  color: var(--brisbane); }
   .cs-head.melbourne { background: var(--melbourne-light); color: var(--melbourne); }
   .cs-head.sydney    { background: var(--sydney-light);    color: var(--sydney); }
   .cs-table { width: 100%; border-collapse: collapse; background: white; }
-  .cs-table th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--cream); }
+  .cs-table th { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--cream); }
+  .cs-table th:not(:first-child) { text-align: right; }
   .cs-table td { font-family: 'DM Mono', monospace; font-size: 11px; padding: 7px 14px; border-bottom: 1px solid var(--border); color: #1b1c1e; }
-  .cs-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12px; color: #1b1c1e; }
-  .cs-table tfoot td { font-weight: 700; background: var(--cream); border-bottom: none; }
+  .cs-table td:not(:first-child) { text-align: right; }
+  .cs-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 400; font-size: 11px; color: #1b1c1e; }
+  .cs-table tfoot td { font-weight: 500; background: var(--cream); border-bottom: none; }
 
   /* ── ACTIONS ── */
   .actions-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
@@ -199,22 +201,24 @@
   /* ── WEEKLY ── */
   .weekly-day-block { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 16px; border: 1.5px solid var(--border); }
   .weekly-day-header { background: var(--olive-pale); color: #1b1c1e; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
-  .weekly-day-header h3 { font-size: 14px; font-weight: 800; }
+  .weekly-day-header h3 { font-size: 14px; font-weight: 500; }
   .weekly-day-header .day-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: #1b1c1e; }
-  .weekly-city-label { padding: 7px 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+  .weekly-city-label { padding: 7px 20px; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
   .weekly-city-label.brisbane  { background: var(--olive-pale); color: #1b1c1e; }
   .weekly-city-label.melbourne { background: var(--olive-pale); color: #1b1c1e; }
   .weekly-city-label.sydney    { background: var(--olive-pale); color: #1b1c1e; }
   .wi-table { width: 100%; border-collapse: collapse; }
-  .wi-table th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 12px 6px; text-align: left; border-bottom: 2px solid var(--border); background: var(--cream-dark); }
+  .wi-table th { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.6px; color: #5a5a5a; padding: 8px 12px 6px; text-align: left; border-bottom: 1px solid var(--border); background: var(--cream-dark); }
   .wi-table td { font-family: 'DM Mono', monospace; font-size: 11px; padding: 7px 12px; border-bottom: 1px solid var(--border); color: #1b1c1e; }
-  .wi-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 11px; color: #1b1c1e; }
+  .wi-table td:first-child { font-family: 'Sora', sans-serif; font-weight: 400; font-size: 11px; color: #1b1c1e; }
+  .wi-table td:not(:first-child) { text-align: right; }
+  .wi-table th:not(:first-child) { text-align: right; }
   .wi-table tr:last-child td { border-bottom: none; }
 
   .weekly-grand { background: var(--olive); color: white; border-radius: var(--radius); padding: 22px 28px; margin-bottom: 22px; }
-  .weekly-grand h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 16px; }
+  .weekly-grand h3 { font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 16px; }
   .grand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 16px; }
-  .grand-item .grand-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.6; margin-bottom: 4px; }
+  .grand-item .grand-label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.6; margin-bottom: 4px; }
   .grand-item .grand-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
 
   /* ── CITY SUB-TABS ── */
@@ -244,7 +248,7 @@
     background: var(--olive); color: white;
     padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;
   }
-  .preview-driver { font-size: 15px; font-weight: 800; }
+  .preview-driver { font-size: 15px; font-weight: 500; }
   .preview-zone { font-family: 'DM Mono', monospace; font-size: 12px; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 20px; }
   .preview-day { font-size: 11px; opacity: 0.7; margin-top: 2px; }
   .preview-body { padding: 16px 18px; }
@@ -253,7 +257,7 @@
   .preview-label { color: #666; font-size: 12px; font-family: 'Sora', sans-serif; }
   .preview-value { font-family: 'Sora', sans-serif; font-weight: 400; color: #1b1c1e; text-align: right; font-size: 12px; }
   .preview-value.highlight { color: #1b1c1e; font-weight: 400; }
-  .preview-value.total { color: #1b1c1e; font-size: 13px; font-weight: 600; }
+  .preview-value.total { color: #1b1c1e; font-size: 13px; font-weight: 500; }
   .preview-calc { font-size: 11px; color: #999; font-family: 'Sora', sans-serif; margin-top: 2px; }
   .preview-divider { height: 1px; background: #eee; margin: 8px 0; }
   .preview-footer { background: var(--cream); padding: 10px 18px; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px; font-family: 'Sora', sans-serif; }
@@ -272,7 +276,7 @@
   }
   .week-arrow:hover { border-color: var(--olive); color: var(--olive); }
   .week-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
-  .week-label { font-size: 14px; font-weight: 700; color: var(--text); min-width: 160px; text-align: center; }
+  .week-label { font-size: 14px; font-weight: 500; color: var(--text); min-width: 160px; text-align: center; }
   .week-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
   .week-badge.current { background: var(--olive-pale); color: var(--olive); }
   .week-badge.archived { background: var(--cream-dark); color: var(--text-muted); }
@@ -773,7 +777,7 @@ function renderPayPreview(){
         </div>`:''}
         <div class="preview-divider"></div>
         <div class="preview-row">
-          <div><div class="preview-label" style="font-weight:700;color:#1b1c1e">Estimated Total Pay</div></div>
+          <div><div class="preview-label" style="color:#1b1c1e">Estimated Total Pay</div></div>
           <div class="preview-value total">${fmtMoney(finalPay)}</div>
         </div>
       </div>
@@ -1084,7 +1088,7 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
           <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
             ${getFixedBonusLabel(day,city,name)
-              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556;font-weight:700">${getFixedBonusLabel(day,city,name)}</div>`
+              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
               : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
             }
             ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
@@ -1115,15 +1119,15 @@ function buildCitySummary(day,city){
     const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=c.bonus||0;
     totB+=boxes;totE+=ep;totF+=fp;
     const speed = c.speed!=null?Math.round(c.speed)+'%':'—';
-    const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b;font-weight:700' : 'color:#569556;font-weight:700';
+    const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b' : 'color:#569556';
     const sixPM = c.sixPM||'—';
-    const sixPMStyle = sixPM.includes('Okay') ? 'color:#569556;font-weight:700' : sixPM==='—' ? '' : (()=>{
+    const sixPMStyle = sixPM.includes('Okay') ? 'color:#569556' : sixPM==='—' ? '' : (()=>{
       const parts=sixPM.match(/\+(\d+):(\d+)/);
       if(!parts)return 'color:#5a5a5a';
       const ov=parseInt(parts[1])*60+parseInt(parts[2]);
-      return ov>=30?'color:#c0392b;font-weight:700':'color:#5a5a5a;font-weight:700';
+      return ov>=30?'color:#c0392b':'color:#5a5a5a';
     })();
-    rows+=`<tr id="srow-${day}-${city}-${name}"><td>${name}</td><td>${boxes}</td><td>${fmtMoney(ep)}</td><td>${fmtMoney(fpb)}</td><td>${bonus?'$'+bonus.toFixed(2):'—'}</td><td><strong>${fmtMoney(fp)}</strong></td><td style="${speedStyle}">${speed}</td><td style="${sixPMStyle}">${sixPM}</td></tr>`;
+    rows+=`<tr id="srow-${day}-${city}-${name}"><td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td><td>${boxes}</td><td>${fmtMoney(ep)}</td><td>${fmtMoney(fpb)}</td><td>${bonus?'$'+bonus.toFixed(2):'—'}</td><td>${fmtMoney(fp)}</td><td style="${speedStyle}">${speed}</td><td style="${sixPMStyle}">${sixPM}</td></tr>`;
   }
   state[day][city]._totals={boxes:totB,est:totE,final:totF};
   return `<div class="city-summary">
@@ -1241,12 +1245,12 @@ function compute(day,city,name){
   const srow=document.getElementById(`srow-${day}-${city}-${name}`);
   if(srow){
     const spd=speed!=null?Math.round(speed)+'%':'—';
-    const spdStyle=speed!=null&&speed<90?'color:#c0392b;font-weight:700':'color:#569556;font-weight:700';
-    const sixStyle=sixPM.includes('Okay')?'color:#569556;font-weight:700':sixPM==='—'?'':(()=>{
+    const spdStyle=speed!=null&&speed<90?'color:#c0392b':'color:#569556';
+    const sixStyle=sixPM.includes('Okay')?'color:#569556':sixPM==='—'?'':(()=>{
       const parts=sixPM.match(/\+(\d+):(\d+)/);
       if(!parts)return 'color:#5a5a5a';
       const ov=parseInt(parts[1])*60+parseInt(parts[2]);
-      return ov>=30?'color:#c0392b;font-weight:700':'color:#5a5a5a;font-weight:700';
+      return ov>=30?'color:#c0392b':'color:#5a5a5a';
     })();
     srow.innerHTML=`
       <td>${name}</td>
@@ -1254,7 +1258,7 @@ function compute(day,city,name){
       <td>${fmtMoney(estPay)}</td>
       <td>${fmtMoney(finalPerBox)}</td>
       <td>${bonus?'$'+bonus.toFixed(2):'—'}</td>
-      <td><strong>${fmtMoney(finalPay)}</strong></td>
+      <td>${fmtMoney(finalPay)}</td>
       <td style="${spdStyle}">${spd}</td>
       <td style="${sixStyle}">${sixPM}</td>`;
   }
@@ -1305,14 +1309,14 @@ function renderWeekly(){
 
   function sixPMclass(val){
     if(!val||val==='—')return '';
-    if(val.includes('Okay'))return 'style="color:#569556;font-weight:700"';
-    return 'style="color:#c0392b;font-weight:700"';
+    if(val.includes('Okay'))return 'style="color:#569556"';
+    return 'style="color:#c0392b"';
   }
   function speedClass(val){
     if(!val||val==='—')return '';
     const n=parseInt(val);
-    if(n>=90)return 'style="background:var(--olive-pale);color:#569556;font-weight:700;border-radius:4px;padding:2px 5px"';
-    return 'style="color:#c0392b;font-weight:700"';
+    if(n>=90)return 'style="background:var(--olive-pale);color:#569556;border-radius:4px;padding:2px 5px"';
+    return 'style="color:#c0392b"';
   }
 
   let html='', grandB=0, grandF=0;
@@ -1349,7 +1353,7 @@ function renderWeekly(){
         totBoxes+=actBoxes; totEst+=estPay; totFinal+=finalPay;
 
         rows+=`<tr>
-          <td style="font-weight:700;font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
+          <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
           <td>${fmtMoney(rate)}</td>
           <td>${estBoxes}</td>
           <td>${adj||'—'}</td>
@@ -1366,7 +1370,7 @@ function renderWeekly(){
           <td ${sixPMclass(sixPM)}>${sixPM}</td>
           <td><span ${speedClass(speed)}>${speed}</span></td>
           <td>${fmtMoney(finalHourly)}</td>
-          <td style="font-weight:700">${fmtMoney(finalPay)}</td>
+          <td >${fmtMoney(finalPay)}</td>
         </tr>`;
 
         // weekly driver totals
@@ -1387,13 +1391,13 @@ function renderWeekly(){
               <div class="day-meta" style="margin-top:2px">${auDate(date)}</div>
             </div>
           </div>
-          <div class="day-meta">${totBoxes} boxes &nbsp;·&nbsp; Total Pay: <strong>${fmtMoney(totFinal)}</strong></div>
+          <div class="day-meta">${totBoxes} boxes &nbsp;·&nbsp; Total Pay: ${fmtMoney(totFinal)}</div>
         </div>
         <table class="wi-table" style="min-width:1100px">
           ${thead}
           <tbody>${rows}</tbody>
           <tfoot>
-            <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
+            <tr style="background:var(--olive-pale);color:#1b1c1e">
               <td style="font-family:'Sora',sans-serif">TOTAL</td>
               <td>—</td><td>—</td><td>—</td>
               <td>${totBoxes}</td>
@@ -1473,7 +1477,7 @@ function renderWeekly(){
     html += `
     <div class="weekly-day-block" style="overflow-x:auto;margin-bottom:14px">
       <div style="background:var(--olive-pale);padding:10px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
-        <div style="font-weight:700;color:var(--olive);font-size:13px">${city}</div>
+        <div style="color:var(--olive);font-size:13px">${city}</div>
         <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
           ${cityBoxes} boxes &nbsp;·&nbsp; ${fmtMoney(cityTotal)}
           ${hasFR ? `&nbsp;·&nbsp; FR: <strong style="color:#c0392b">${cityFRDeduction.toFixed(2)}</strong> (${frPct}%)` : ''}
@@ -1492,24 +1496,24 @@ function renderWeekly(){
       const fuelComp = driverFuel[d.name]||0;
       const netPay = d.finalPay + frDeduction + fuelComp;
       html += `<tr>
-        <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${d.name}</td>
+        <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${d.name}</td>
         <td>${d.days}</td>
         <td>${d.boxes}</td>
         <td>${fmtMoney(d.finalPay)}</td>
-        <td style="${frDeduction<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">
+        <td style="${frDeduction<0?'color:#c0392b':'color:#5a5a5a'}">
           ${frDeduction!==0?frDeduction.toFixed(2):'—'}
         </td>
         <td style="color:#5a5a5a">
           ${fuelComp>0?'+$'+Math.round(fuelComp):'—'}
         </td>
-        <td style="font-weight:700;color:#1b1c1e">${fmtMoney(netPay)}</td>
+        <td style="color:#1b1c1e">${fmtMoney(netPay)}</td>
       </tr>`;
     });
     // totals row
     const totalFRDeduction = cityTotal > 0 ? cityTotal * frRate : 0;
     const grandNet = cityTotal + totalFRDeduction + totalFuelComp;
     html += `
-      <tfoot><tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
+      <tfoot><tr style="background:var(--olive-pale);color:#1b1c1e">
         <td>TOTAL</td><td>—</td><td>${cityBoxes}</td>
         <td>${fmtMoney(cityTotal)}</td>
         <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
@@ -1571,12 +1575,12 @@ function renderFoodRelief(){
         const pct=finalPay>0?(foodDeduction/finalPay)*100:0;
         dayFinal+=finalPay; dayDeduction+=foodDeduction;
         rows+=`<tr>
-          <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${name}</td>
-          <td style="text-align:center">${foodBoxes}</td>
-          <td style="${foodDeduction<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">${foodDeduction!==0?foodDeduction.toFixed(2):'—'}</td>
+          <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
+          <td style="text-align:right">${foodBoxes}</td>
+          <td style="${foodDeduction<0?'color:#c0392b':'color:#5a5a5a'}">${foodDeduction!==0?foodDeduction.toFixed(2):'—'}</td>
           <td>${fmtMoney(finalPerBox)}</td>
-          <td style="font-weight:700">${fmtMoney(finalPay)}</td>
-          <td style="${pct<0?'color:#c0392b;font-weight:700':'color:#5a5a5a'}">${pct.toFixed(2)}%</td>
+          <td >${fmtMoney(finalPay)}</td>
+          <td style="${pct<0?'color:#c0392b':'color:#5a5a5a'}">${pct.toFixed(2)}%</td>
         </tr>`;
       }
       grandDeduction+=dayDeduction; grandFinalPay+=dayFinal;
@@ -1593,7 +1597,7 @@ function renderFoodRelief(){
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
             Deductions: <strong style="${dayDeduction<0?'color:#c0392b':''}">${dayDeduction.toFixed(2)}</strong>
-            &nbsp;·&nbsp; Total Pay: <strong>${fmtMoney(dayFinal)}</strong>
+            &nbsp;·&nbsp; Total Pay: ${fmtMoney(dayFinal)}
           </div>
         </div>
 
@@ -1627,7 +1631,7 @@ function renderFoodRelief(){
           </tr></thead>
           <tbody>${rows}</tbody>
           <tfoot>
-            <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
+            <tr style="background:var(--olive-pale);color:#1b1c1e">
               <td>TOTAL</td><td>—</td>
               <td style="${dayDeduction<0?'color:#c0392b':''}">${dayDeduction.toFixed(2)}</td>
               <td>—</td>
@@ -1746,7 +1750,7 @@ function renderFuel(){
   let html = `
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">${city} — Fuel Rates Reference</div>
+      <div style="font-weight:500;font-size:14px">${city} — Fuel Rates Reference</div>
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">Reimbursement Rate: 50%</div>
     </div>
     <div style="overflow-x:auto">
@@ -1755,8 +1759,8 @@ function renderFuel(){
         <th>Vehicle Type</th><th>Economy (L/100km)</th><th>Base Price ($)</th><th>New Price ($)</th>
       </tr></thead>
       <tbody>
-        <tr><td style="font-weight:700;color:#1b1c1e">Diesel</td><td>13</td><td>$1.90</td><td>$3.04</td></tr>
-        <tr><td style="font-weight:700;color:#1b1c1e">Petrol</td><td>16</td><td>$1.80</td><td>$2.50</td></tr>
+        <tr><td style="color:#1b1c1e">Diesel</td><td>13</td><td>$1.90</td><td>$3.04</td></tr>
+        <tr><td style="color:#1b1c1e">Petrol</td><td>16</td><td>$1.80</td><td>$2.50</td></tr>
       </tbody>
     </table>
     </div>
@@ -1764,14 +1768,14 @@ function renderFuel(){
 
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">${city} — Weekly Fuel Reimbursement</div>
+      <div style="font-weight:500;font-size:14px">${city} — Weekly Fuel Reimbursement</div>
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">KM from Estimated CSVs · All days combined</div>
     </div>
     <div style="overflow-x:auto">
     <table class="wi-table">
       <thead><tr>
-        <th>Driver</th><th>Vehicle Type</th><th>KM Driven</th>
-        <th>Base Price</th><th>New Price</th><th>Litres Used</th><th>Compensation ($)</th>
+        <th>Driver</th><th>Vehicle Type</th><th style="text-align:right">KM Driven</th>
+        <th style="text-align:right">Base Price</th><th style="text-align:right">New Price</th><th style="text-align:right">Litres Used</th><th style="text-align:right">Compensation ($)</th>
       </tr></thead>
       <tbody>`;
 
@@ -1787,7 +1791,7 @@ function renderFuel(){
 
     const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
     html += `<tr>
-      <td style="font-family:'Sora',sans-serif;font-weight:700;color:#1b1c1e">${name}</td>
+      <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
       <td>
         <select id="${selId}" onchange="setFuelType('${city}','${name}',this.value)"
           style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1.5px solid var(--border);background:white;color:var(--olive);cursor:pointer">
@@ -1795,19 +1799,19 @@ function renderFuel(){
           <option value="Petrol"${vtype==='Petrol'?' selected':''}>Petrol</option>
         </select>
       </td>
-      <td>${Math.round(km)}</td>
-      <td>${fmtMoney(rates.base)}</td>
-      <td>${fmtMoney(rates.newPrice)}</td>
-      <td>${litres.toFixed(1)}</td>
-      <td style="font-weight:700;color:#1b1c1e">${fmtMoney(comp, 0)}</td>
+      <td style="text-align:right">${Math.round(km)}</td>
+      <td style="text-align:right">${fmtMoney(rates.base)}</td>
+      <td style="text-align:right">${fmtMoney(rates.newPrice)}</td>
+      <td style="text-align:right">${litres.toFixed(1)}</td>
+      <td style="text-align:right;color:#1b1c1e">${fmtMoney(comp, 0)}</td>
     </tr>`;
   }
 
   html += `</tbody>
     <tfoot>
-      <tr style="background:var(--olive-pale);font-weight:700;color:#1b1c1e">
-        <td>TOTAL</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
-        <td>${fmtMoney(totalComp, 0)}</td>
+      <tr style="background:var(--olive-pale);color:#1b1c1e">
+        <td>TOTAL</td><td>—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td>
+        <td style="text-align:right">${fmtMoney(totalComp, 0)}</td>
       </tr>
     </tfoot>
     </table>
@@ -1923,7 +1927,7 @@ function renderInvoice(){
   // Global settings card
   html += `<div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">🧾 Invoice Settings</div>
+      <div style="font-weight:500;font-size:14px">🧾 Invoice Settings</div>
     </div>
     <div style="padding:20px;background:var(--surface)">
       <div class="config-row" style="margin-bottom:0">
@@ -1961,7 +1965,7 @@ function renderInvoice(){
   <!-- Driver Details CSV Upload -->
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
-      <div style="font-weight:800;font-size:14px">👥 Driver Details CSV</div>
+      <div style="font-weight:500;font-size:14px">👥 Driver Details CSV</div>
       <div style="font-size:11px;color:#1b1c1e">Columns: City, Driver Name, Company Name, Phone, ABN, Address, Email, BSB, Account</div>
     </div>
     <div style="padding:16px 20px;background:var(--surface);display:flex;align-items:center;gap:14px">
@@ -2049,7 +2053,7 @@ function renderInvoice(){
     html += `
     <div class="weekly-day-block" style="margin-bottom:16px">
       <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-weight:800;font-size:14px">🧾 ${det.company||name} — Invoice #${invNum}</div>
+        <div style="font-weight:500;font-size:14px">🧾 ${det.company||name} — Invoice #${invNum}</div>
         <button class="export-btn" style="padding:7px 16px;font-size:12px" onclick="generateInvoicePDF('${name}','${city}','${invNum}')">⬇ Download PDF</button>
       </div>
       <div style="padding:16px 20px;background:var(--surface)">
