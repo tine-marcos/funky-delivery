@@ -288,7 +288,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBR1iV_Pv2xVFqFhc5DzkRyI2qev3rXimM",
@@ -299,12 +299,19 @@
       appId: "1:904124927999:web:e8c3e52187ef250b6ee1ca"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    window._db = db;
-    window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection, orderBy, query };
-    window._firebaseReady = true;
-    console.log('Firebase connected!');
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      window._db = db;
+      window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection };
+      window._firebaseReady = true;
+      console.log('Firebase connected! ☁️');
+      // Trigger Firebase-dependent loads now that it's ready
+      if(window._onFirebaseReady) window._onFirebaseReady();
+    } catch(e) {
+      console.error('Firebase init error:', e);
+      window._firebaseReady = false;
+    }
   </script>
 </head>
 <body>
@@ -2472,18 +2479,21 @@ function sendAllToDEXT(){
   }, 500);
 }
 
-// Start with archive (uses localStorage immediately, then Firebase)
+// Start with localStorage data immediately
 loadArchiveFromStorage();
-// Wait for Firebase to be ready then load details and session
-function waitForFirebaseAndLoad(){
-  if(window._firebaseReady && window._db){
-    loadDriverDetailsFromFirebase();
-    setTimeout(()=>autoLoadSession(), 500);
-  } else {
-    setTimeout(waitForFirebaseAndLoad, 300);
-  }
+
+// When Firebase is ready, reload everything from cloud
+window._onFirebaseReady = function(){
+  console.log('Firebase ready — loading cloud data...');
+  loadArchiveFromStorage(); // reload with Firebase data
+  loadDriverDetailsFromFirebase();
+  setTimeout(()=>autoLoadSession(), 800);
+};
+
+// If Firebase was already ready before this ran (unlikely but safe)
+if(window._firebaseReady && window._db){
+  window._onFirebaseReady();
 }
-setTimeout(waitForFirebaseAndLoad, 500);
 </script>
 </body>
 </html>
