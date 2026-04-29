@@ -258,6 +258,27 @@
   .save-week-btn:hover { background: var(--olive-light); }
   .archive-count { font-size: 11px; color: var(--text-muted); }
 </style>
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDocs, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBR1iV_Pv2xVFqFhc5DzkRyI2qev3rXimM",
+      authDomain: "funky-delivery-au.firebaseapp.com",
+      projectId: "funky-delivery-au",
+      storageBucket: "funky-delivery-au.firebasestorage.app",
+      messagingSenderId: "904124927999",
+      appId: "1:904124927999:web:e8c3e52187ef250b6ee1ca"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    window._db = db;
+    window._firestoreFns = { doc, setDoc, getDocs, collection, orderBy, query };
+    window._firebaseReady = true;
+    console.log('Firebase connected!');
+  </script>
 </head>
 <body>
 
@@ -414,19 +435,24 @@ function startNewWeek(){
       state[day][city]={drivers:{},date:d.toISOString().split('T')[0],estLoaded:false,actLoaded:false,_totals:{}};
     });
   });
-  // Reset other state
+  // Reset other state but KEEP the archive safe
   Object.keys(frState).forEach(k=>delete frState[k]);
   Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
   invoiceSettings={submittedOn:'',invoiceStart:'040101',dueDate:''};
   viewingArchiveIndex=-1;
+  savedCurrentState=null;
+  savedCurrentFR=null;
+  savedCurrentFuel=null;
   activeTab='Tuesday';
+  // Reload archive from localStorage to make sure it's still there
+  loadArchiveFromStorage();
   buildTabs();
   buildMain();
   updateWeekNav();
-  alert('✅ All cleared! Ready for a new week.');
+  alert('✅ All cleared! Ready for a new week. Your '+weekArchive.length+' saved week(s) are safe in the archive!');
 }
 
-function saveCurrentWeek(){
+async function saveCurrentWeek(){
   // always save from actual current state (not archived view)
   const tueDates = CITIES.map(c=>state['Tuesday'][c]?.date).filter(Boolean);
   const label = tueDates.length ? getWeekLabel(tueDates[0]) : 'Week '+(weekArchive.length+1);
@@ -446,51 +472,107 @@ function saveCurrentWeek(){
     invoiceSettings: JSON.parse(JSON.stringify(invoiceSettings)),
   };
 
-  // save to localStorage
+  // Save to Firebase + localStorage backup
   try {
-    weekArchive.unshift(snapshot); // newest first
-    localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive));
-    alert('✅ Week saved! You can now clear data and start a new week.');
+    weekArchive.unshift(snapshot);
+    // Save to localStorage as backup
+    try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+    // Save to Firebase
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      const weekId = 'week_' + snapshot.savedAt.replace(/[:.]/g,'_');
+      await setDoc(doc(window._db, 'weekArchive', weekId), snapshot);
+      console.log('Saved to Firebase:', weekId);
+    }
+    alert('✅ Week saved! Synced across all browsers and devices.');
     updateWeekNav();
   } catch(e) {
-    alert('Could not save — storage may be full.');
+    console.error('Save error:', e);
+    alert('Could not save — please try again.');
   }
 }
 
+// Store current week state when navigating away
+let savedCurrentState = null;
+let savedCurrentFR = null;
+let savedCurrentFuel = null;
+
 function navigateWeek(dir){
   if(dir === -1){
-    // go back in time (older archives)
-    if(viewingArchiveIndex < 0) viewingArchiveIndex = 0;
-    else viewingArchiveIndex = Math.min(viewingArchiveIndex+1, weekArchive.length-1);
+    // going back — save current week state first if not already archived
+    if(viewingArchiveIndex < 0){
+      savedCurrentState = JSON.parse(JSON.stringify(state));
+      savedCurrentFR = JSON.parse(JSON.stringify(frState));
+      savedCurrentFuel = JSON.parse(JSON.stringify(fuelVehicleType));
+      viewingArchiveIndex = 0;
+    } else {
+      viewingArchiveIndex = Math.min(viewingArchiveIndex+1, weekArchive.length-1);
+    }
   } else {
-    // go forward (newer / current)
-    if(viewingArchiveIndex <= 0) viewingArchiveIndex = -1;
-    else viewingArchiveIndex--;
+    // going forward toward current
+    if(viewingArchiveIndex <= 0){
+      viewingArchiveIndex = -1;
+    } else {
+      viewingArchiveIndex--;
+    }
   }
 
   if(viewingArchiveIndex >= 0){
-    // viewing archive — restore snapshot state for display
+    // viewing archive — load snapshot into state for display only
     const snap = weekArchive[viewingArchiveIndex];
-    archivedState = snap.state;
-    // temporarily swap state
-    Object.assign(state, JSON.parse(JSON.stringify(snap.state)));
-    Object.assign(frState, JSON.parse(JSON.stringify(snap.frState)));
-    Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(snap.fuelVehicleType)));
+    // deep copy archive into state for display
+    ALL_DAYS.forEach(day=>{
+      DAY_CITIES[day].forEach(city=>{
+        if(snap.state[day]&&snap.state[day][city])
+          state[day][city]=JSON.parse(JSON.stringify(snap.state[day][city]));
+      });
+    });
+    Object.keys(frState).forEach(k=>delete frState[k]);
+    Object.assign(frState, JSON.parse(JSON.stringify(snap.frState||{})));
+    Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
+    Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(snap.fuelVehicleType||{})));
   } else {
-    // back to current — but we don't restore since current was never replaced
-    // just rebuild from current state
-    archivedState = null;
+    // back to current — restore saved current state
+    if(savedCurrentState){
+      ALL_DAYS.forEach(day=>{
+        DAY_CITIES[day].forEach(city=>{
+          if(savedCurrentState[day]&&savedCurrentState[day][city])
+            state[day][city]=JSON.parse(JSON.stringify(savedCurrentState[day][city]));
+        });
+      });
+      Object.keys(frState).forEach(k=>delete frState[k]);
+      if(savedCurrentFR) Object.assign(frState, JSON.parse(JSON.stringify(savedCurrentFR)));
+      Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
+      if(savedCurrentFuel) Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(savedCurrentFuel)));
+    }
   }
 
   updateWeekNav();
   buildMain();
 }
 
-function loadArchiveFromStorage(){
+async function loadArchiveFromStorage(){
+  // Try Firebase first, fall back to localStorage
   try {
+    if(window._firebaseReady && window._db){
+      const { getDocs, collection, query, orderBy } = window._firestoreFns;
+      const q = query(collection(window._db, 'weekArchive'), orderBy('savedAt', 'desc'));
+      const snapshot = await getDocs(q);
+      weekArchive = [];
+      snapshot.forEach(doc => weekArchive.push(doc.data()));
+      console.log('Loaded '+weekArchive.length+' weeks from Firebase');
+    } else {
+      const saved = localStorage.getItem('funkyDeliveryArchive');
+      if(saved) weekArchive = JSON.parse(saved);
+    }
+  } catch(e) {
+    console.error('Load error:', e);
     const saved = localStorage.getItem('funkyDeliveryArchive');
     if(saved) weekArchive = JSON.parse(saved);
-  } catch(e) { weekArchive = []; }
+  }
+  updateWeekNav();
+  buildTabs();
+  buildMain();
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
@@ -2130,10 +2212,8 @@ function sendAllToDEXT(){
   }, 500);
 }
 
+// Firebase loads async — buildTabs and buildMain called inside loadArchiveFromStorage
 loadArchiveFromStorage();
-buildTabs();
-buildMain();
-updateWeekNav();
 </script>
 </body>
 </html>
