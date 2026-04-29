@@ -47,7 +47,7 @@
     display: flex; align-items: center; justify-content: space-between;
     height: 64px;
     position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 2px 12px rgba(30,58,47,0.08); border-bottom: 2px solid var(--border);
+    box-shadow: 0 2px 12px rgba(30,58,47,0.08); border-bottom: 1px solid var(--border);
   }
   .logo { display: flex; align-items: center; gap: 12px; }
   .logo-icon {
@@ -64,7 +64,7 @@
   /* ── TABS ── */
   .tabs-bar {
     background: var(--cream);
-    border-bottom: 2px solid var(--border);
+    border-bottom: 1px solid var(--border);
     display: flex; align-items: center; padding: 0 32px; gap: 0;
     position: sticky; top: 64px; z-index: 99;
     overflow-x: auto;
@@ -80,8 +80,8 @@
   .tab-btn.active { color: #569556; border-bottom-color: #569556; }
   .tab-btn.weekly-tab { margin-left: auto; margin-right: auto; color: var(--text-muted); }
   .tab-btn.right-group { color: var(--text-muted); }
-  .tab-btn.weekly-tab.active { color: #1b1c1e; border-bottom-color: #1b1c1e; }
-  .tab-btn.right-group.active { color: #1b1c1e; border-bottom-color: #1b1c1e; }
+  .tab-btn.weekly-tab.active { color: #1b1c1e; border-bottom-color: var(--olive); }
+  .tab-btn.right-group.active { color: #1b1c1e; border-bottom-color: var(--olive); }
   .tab-dots { display: flex; gap: 3px; align-items: center; }
   .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.2s; }
   .tab-dot.loaded.brisbane  { background: var(--brisbane); }
@@ -95,7 +95,7 @@
   .city-section {
     border-radius: var(--radius); overflow: hidden;
     margin-bottom: 22px; box-shadow: var(--shadow);
-    border: 1.5px solid var(--border);
+    border: 1px solid var(--border);
   }
   .city-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -129,7 +129,7 @@
   .upload-card p { font-size: 11px; color: var(--text-muted); }
   .upload-card input { display: none; }
   .upload-btn {
-    margin-top: 10px; background: var(--cream); color: var(--olive); border: 1.5px solid var(--border);
+    margin-top: 10px; background: var(--cream); color: var(--olive); border: 1px solid var(--border);
     padding: 7px 16px; border-radius: 8px; font-family: 'Sora', sans-serif;
     font-size: 11px; font-weight: 700; cursor: pointer; transition: background 0.15s;
   }
@@ -140,7 +140,7 @@
   .config-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
   .config-card { background: #f8f8f8; border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 140px; border: 1px solid var(--border); }
   .config-card label { display: block; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; color: #5a5a5a; margin-bottom: 6px; }
-  .config-card input { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-family: 'DM Mono', monospace; font-size: 13px; background: white; outline: none; color: var(--text); }
+  .config-card input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-family: 'DM Mono', monospace; font-size: 13px; background: white; outline: none; color: var(--text); }
   .config-card input:focus { border-color: var(--olive-light); }
 
   /* ── SECTION TITLE ── */
@@ -149,7 +149,7 @@
 
   /* ── DRIVER CARDS ── */
   .drivers-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-  .driver-card { background: white; border-radius: 11px; overflow: hidden; border: 1.5px solid var(--border); box-shadow: 0 1px 6px rgba(30,58,47,0.05); }
+  .driver-card { background: white; border-radius: 11px; overflow: hidden; border: 1px solid var(--border); }
   .driver-header { background: #569556; color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
   .driver-name { font-size: 13px; font-weight: 500; color: white; }
   .driver-stops { font-family: 'DM Mono', monospace; font-size: 10px; opacity: 0.75; background: rgba(255,255,255,0.15); padding: 2px 9px; border-radius: 12px; color: white; }
@@ -157,8 +157,8 @@
   .fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 9px; margin-bottom: 11px; }
   .field-group { display: flex; flex-direction: column; gap: 3px; }
   .field-group label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
-  .field-group .val { font-family: 'DM Mono', monospace; font-size: 12px; background: white; border: 1.5px solid var(--border); border-radius: 6px; padding: 5px 8px; color: #1b1c1e; }
-  .field-group input[type="number"], .field-group input[type="time"] { font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; border: 1.5px solid var(--olive-light); border-radius: 6px; padding: 5px 8px; outline: none; width: 100%; color: var(--text); }
+  .field-group .val { font-family: 'DM Mono', monospace; font-size: 12px; background: white; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: #1b1c1e; }
+  .field-group input[type="number"], .field-group input[type="time"] { font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; outline: none; width: 100%; color: var(--text); }
   .field-group input:focus { box-shadow: 0 0 0 3px rgba(74,124,89,0.15); }
   .tag-input { background: var(--olive-pale) !important; border-color: var(--olive-light) !important; }
   .tag-input:focus { box-shadow: 0 0 0 3px rgba(74,124,89,0.18) !important; }
@@ -190,7 +190,7 @@
   .export-btn:hover { background: var(--olive-mid); transform: translateY(-1px); }
   .export-btn.orange { background: var(--olive-light); color: white; box-shadow: 0 3px 10px rgba(74,124,89,0.25); }
   .export-btn.orange:hover { background: var(--olive-mid); }
-  .clear-btn { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); padding: 9px 14px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+  .clear-btn { background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 9px 14px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 11px; cursor: pointer; transition: all 0.15s; }
   .clear-btn:hover { border-color: var(--olive-light); color: var(--olive-light); }
 
   /* ── EMPTY STATE ── */
@@ -199,8 +199,8 @@
   .empty-state p { font-size: 13px; font-weight: 600; } .empty-state small { font-size: 11px; opacity: 0.7; }
 
   /* ── WEEKLY ── */
-  .weekly-day-block { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 16px; border: 1.5px solid var(--border); }
-  .weekly-day-header { background: var(--olive-pale); color: #1b1c1e; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
+  .weekly-day-block { background: var(--surface); border-radius: var(--radius); box-shadow: none; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border); }
+  .weekly-day-header { background: var(--olive-pale); color: #1b1c1e; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
   .weekly-day-header h3 { font-size: 14px; font-weight: 500; }
   .weekly-day-header .day-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: #1b1c1e; }
   .weekly-city-label { padding: 7px 20px; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
@@ -225,12 +225,12 @@
   .city-subtabs { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
   .city-subtab {
     display: flex; align-items: center; gap: 7px;
-    padding: 9px 20px; border-radius: 30px; border: 2px solid var(--border);
+    padding: 9px 20px; border-radius: 30px; border: 1px solid var(--border);
     background: var(--surface); cursor: pointer; font-family: 'Sora', sans-serif;
     font-size: 13px; font-weight: 600; color: #5a5a5a; transition: all 0.15s;
   }
   .city-subtab:hover { border-color: var(--olive-light); color: #1b1c1e; }
-  .city-subtab.active { background: var(--olive); color: white; border-color: #1b1c1e; }
+  .city-subtab.active { background: var(--olive); color: white; border-color: var(--olive); }
   .city-subtab .subtab-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.6; }
   .city-subtab.active .subtab-dot { opacity: 1; background: var(--olive-pale); }
   .city-subtab .subtab-status { font-size: 10px; opacity: 0.7; }
@@ -270,7 +270,7 @@
   }
   .week-nav-center { display: flex; align-items: center; gap: 12px; }
   .week-arrow {
-    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border);
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
     background: var(--surface); cursor: pointer; display: flex; align-items: center;
     justify-content: center; font-size: 14px; color: var(--text-muted); transition: all 0.15s;
   }
@@ -344,7 +344,7 @@
   <div class="week-nav-right">
 
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
-    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1.5px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
+    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
   </div>
 </div>
 <main id="mainContent"></main>
@@ -1587,7 +1587,7 @@ function renderFoodRelief(){
 
       html+=`<div class="weekly-day-block" style="margin-bottom:20px">
         <!-- City/Day Header -->
-        <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
+        <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:10px">
             
             <div>
@@ -1749,7 +1749,7 @@ function renderFuel(){
   // rates reference table
   let html = `
   <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
+    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
       <div style="font-weight:500;font-size:14px">${city} — Fuel Rates Reference</div>
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">Reimbursement Rate: 50%</div>
     </div>
@@ -1767,7 +1767,7 @@ function renderFuel(){
   </div>
 
   <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
+    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
       <div style="font-weight:500;font-size:14px">${city} — Weekly Fuel Reimbursement</div>
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">KM from Estimated CSVs · All days combined</div>
     </div>
@@ -1794,7 +1794,7 @@ function renderFuel(){
       <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
       <td>
         <select id="${selId}" onchange="setFuelType('${city}','${name}',this.value)"
-          style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1.5px solid var(--border);background:white;color:var(--olive);cursor:pointer">
+          style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:white;color:var(--olive);cursor:pointer">
           <option value="Diesel"${vtype==='Diesel'?' selected':''}>Diesel</option>
           <option value="Petrol"${vtype==='Petrol'?' selected':''}>Petrol</option>
         </select>
@@ -1926,7 +1926,7 @@ function renderInvoice(){
 
   // Global settings card
   html += `<div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
+    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
       <div style="font-weight:500;font-size:14px">🧾 Invoice Settings</div>
     </div>
     <div style="padding:20px;background:var(--surface)">
@@ -1964,7 +1964,7 @@ function renderInvoice(){
 
   <!-- Driver Details CSV Upload -->
   <div class="weekly-day-block" style="margin-bottom:20px">
-    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border)">
+    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
       <div style="font-weight:500;font-size:14px">👥 Driver Details CSV</div>
       <div style="font-size:11px;color:#1b1c1e">Columns: City, Driver Name, Company Name, Phone, ABN, Address, Email, BSB, Account</div>
     </div>
@@ -2052,7 +2052,7 @@ function renderInvoice(){
 
     html += `
     <div class="weekly-day-block" style="margin-bottom:16px">
-      <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:2px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <div style="font-weight:500;font-size:14px">🧾 ${det.company||name} — Invoice #${invNum}</div>
         <button class="export-btn" style="padding:7px 16px;font-size:12px" onclick="generateInvoicePDF('${name}','${city}','${invNum}')">⬇ Download PDF</button>
       </div>
