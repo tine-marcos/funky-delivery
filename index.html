@@ -638,27 +638,33 @@ function navigateWeek(dir){
 }
 
 async function loadArchiveFromStorage(){
-  // Try Firebase first, fall back to localStorage
+  // Always build UI first with localStorage data
+  try {
+    const saved = localStorage.getItem('funkyDeliveryArchive');
+    if(saved) weekArchive = JSON.parse(saved);
+  } catch(e){}
+  buildTabs();
+  buildMain();
+  updateWeekNav();
+
+  // Then try to get fresh data from Firebase
   try {
     if(window._firebaseReady && window._db){
       const { getDocs, collection, query, orderBy } = window._firestoreFns;
       const q = query(collection(window._db, 'weekArchive'), orderBy('savedAt', 'desc'));
       const snapshot = await getDocs(q);
-      weekArchive = [];
-      snapshot.forEach(doc => weekArchive.push(doc.data()));
-      console.log('Loaded '+weekArchive.length+' weeks from Firebase');
-    } else {
-      const saved = localStorage.getItem('funkyDeliveryArchive');
-      if(saved) weekArchive = JSON.parse(saved);
+      if(!snapshot.empty){
+        weekArchive = [];
+        snapshot.forEach(d => weekArchive.push(d.data()));
+        // Save to localStorage as backup
+        try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+        console.log('Loaded '+weekArchive.length+' weeks from Firebase ☁️');
+        updateWeekNav();
+      }
     }
   } catch(e) {
-    console.error('Load error:', e);
-    const saved = localStorage.getItem('funkyDeliveryArchive');
-    if(saved) weekArchive = JSON.parse(saved);
+    console.error('Firebase archive load error:', e);
   }
-  updateWeekNav();
-  buildTabs();
-  buildMain();
 }
 
 // ── PAY PREVIEW ──────────────────────────────────────────────────────────────
@@ -2465,13 +2471,18 @@ function sendAllToDEXT(){
   }, 500);
 }
 
-// Firebase loads async
+// Start with archive (uses localStorage immediately, then Firebase)
 loadArchiveFromStorage();
-// Load driver details and last session from Firebase
-setTimeout(()=>{
-  loadDriverDetailsFromFirebase();
-  autoLoadSession();
-}, 1500);
+// Wait for Firebase to be ready then load details and session
+function waitForFirebaseAndLoad(){
+  if(window._firebaseReady && window._db){
+    loadDriverDetailsFromFirebase();
+    setTimeout(()=>autoLoadSession(), 500);
+  } else {
+    setTimeout(waitForFirebaseAndLoad, 300);
+  }
+}
+setTimeout(waitForFirebaseAndLoad, 500);
 </script>
 </body>
 </html>
