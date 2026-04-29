@@ -650,12 +650,13 @@ async function loadArchiveFromStorage(){
   // Then try to get fresh data from Firebase
   try {
     if(window._firebaseReady && window._db){
-      const { getDocs, collection, query, orderBy } = window._firestoreFns;
-      const q = query(collection(window._db, 'weekArchive'), orderBy('savedAt', 'desc'));
-      const snapshot = await getDocs(q);
+      const { getDocs, collection } = window._firestoreFns;
+      const snapshot = await getDocs(collection(window._db, 'weekArchive'));
       if(!snapshot.empty){
         weekArchive = [];
         snapshot.forEach(d => weekArchive.push(d.data()));
+        // Sort by savedAt descending
+        weekArchive.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
         // Save to localStorage as backup
         try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
         console.log('Loaded '+weekArchive.length+' weeks from Firebase ☁️');
