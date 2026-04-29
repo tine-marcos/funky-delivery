@@ -248,15 +248,15 @@
   .preview-zone { font-family: 'DM Mono', monospace; font-size: 12px; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 20px; }
   .preview-day { font-size: 11px; opacity: 0.7; margin-top: 2px; }
   .preview-body { padding: 16px 18px; }
-  .preview-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .preview-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
   .preview-row:last-child { border-bottom: none; }
-  .preview-label { color: #666; font-size: 12px; }
-  .preview-value { font-family: 'Sora', sans-serif; font-weight: 400; color: #1b1c1e; text-align: right; font-size: 13px; }
+  .preview-label { color: #666; font-size: 12px; font-family: 'Sora', sans-serif; }
+  .preview-value { font-family: 'Sora', sans-serif; font-weight: 400; color: #1b1c1e; text-align: right; font-size: 12px; }
   .preview-value.highlight { color: #1b1c1e; font-weight: 400; }
-  .preview-value.total { color: #1b1c1e; font-size: 14px; font-weight: 600; }
-  .preview-calc { font-size: 11px; color: #888; font-family: 'Sora', sans-serif; margin-top: 2px; }
+  .preview-value.total { color: #1b1c1e; font-size: 13px; font-weight: 600; }
+  .preview-calc { font-size: 11px; color: #999; font-family: 'Sora', sans-serif; margin-top: 2px; }
   .preview-divider { height: 1px; background: #eee; margin: 8px 0; }
-  .preview-footer { background: var(--cream); padding: 10px 18px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
+  .preview-footer { background: var(--cream); padding: 10px 18px; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px; font-family: 'Sora', sans-serif; }
 
   /* ── WEEK NAVIGATOR ── */
   .week-nav {
@@ -288,7 +288,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, orderBy, query } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBR1iV_Pv2xVFqFhc5DzkRyI2qev3rXimM",
@@ -302,7 +302,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     window._db = db;
-    window._firestoreFns = { doc, setDoc, getDoc, getDocs, collection, orderBy, query };
+    window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection, orderBy, query };
     window._firebaseReady = true;
     console.log('Firebase connected!');
   </script>
@@ -405,6 +405,60 @@ function setTuesdayDate(city, tuesdayVal){
 
 document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
+// ── AUTO SAVE / LOAD ──────────────────────────────────────────────────────────
+async function autoSaveSession(){
+  try {
+    const sessionData = {
+      state: JSON.parse(JSON.stringify(state)),
+      frState: JSON.parse(JSON.stringify(frState)),
+      fuelVehicleType: JSON.parse(JSON.stringify(fuelVehicleType)),
+      invoiceSettings: JSON.parse(JSON.stringify(invoiceSettings)),
+      savedAt: new Date().toISOString()
+    };
+    // Save to localStorage immediately
+    localStorage.setItem('funkyCurrentSession', JSON.stringify(sessionData));
+    // Save to Firebase if available
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'currentSession'), sessionData);
+    }
+  } catch(e){ console.error('Auto-save error:', e); }
+}
+
+async function autoLoadSession(){
+  try {
+    let sessionData = null;
+    // Try Firebase first
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'currentSession'));
+      if(snap.exists()) sessionData = snap.data();
+    }
+    // Fallback to localStorage
+    if(!sessionData){
+      const saved = localStorage.getItem('funkyCurrentSession');
+      if(saved) sessionData = JSON.parse(saved);
+    }
+    if(sessionData && sessionData.state){
+      // Restore state
+      ALL_DAYS.forEach(day=>{
+        DAY_CITIES[day].forEach(city=>{
+          if(sessionData.state[day]&&sessionData.state[day][city]){
+            state[day][city] = sessionData.state[day][city];
+          }
+        });
+      });
+      if(sessionData.frState) Object.assign(frState, sessionData.frState);
+      if(sessionData.fuelVehicleType) Object.assign(fuelVehicleType, sessionData.fuelVehicleType);
+      if(sessionData.invoiceSettings) Object.assign(invoiceSettings, sessionData.invoiceSettings);
+      console.log('Session restored!');
+      buildTabs();
+      buildMain();
+      updateWeekNav();
+    }
+  } catch(e){ console.error('Auto-load error:', e); }
+}
+
 // ── WEEK ARCHIVE ─────────────────────────────────────────────────────────────
 function getWeekLabel(tuesdayDate){
   if(!tuesdayDate) return 'Current Week';
@@ -471,7 +525,12 @@ function startNewWeek(){
   savedCurrentFR=null;
   savedCurrentFuel=null;
   activeTab='Tuesday';
-  // Reload archive from localStorage to make sure it's still there
+  // Clear auto-saved session
+  localStorage.removeItem('funkyCurrentSession');
+  if(window._firebaseReady && window._db){
+    const { doc, deleteDoc } = window._firestoreFns;
+    deleteDoc(doc(window._db, 'settings', 'currentSession')).catch(()=>{});
+  }
   loadArchiveFromStorage();
   buildTabs();
   buildMain();
@@ -704,15 +763,15 @@ function renderPayPreview(){
           <div class="preview-value total">${fmtMoney(finalPay)}</div>
         </div>
       </div>
-      <div class="preview-footer" style="flex-direction:column;gap:5px">
-        <div style="display:flex;justify-content:space-between">
-          <span>Start time</span><span>${d.depotStart||'—'}</span>
+      <div class="preview-footer" style="flex-direction:column;gap:5px;font-size:12px;font-family:'Sora',sans-serif">
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:#888">Start time</span><span style="color:#1b1c1e">${d.depotStart||'—'}</span>
         </div>
-        <div style="display:flex;justify-content:space-between">
-          <span>Estimated last stop time</span><span>${d.estLastTime||'—'}</span>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:#888">Estimated last stop time</span><span style="color:#1b1c1e">${d.estLastTime||'—'}</span>
         </div>
-        <div style="display:flex;justify-content:space-between">
-          <span>Estimated finish time</span><span>${d.depotEnd||'—'}</span>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:#888">Estimated finish time</span><span style="color:#1b1c1e">${d.depotEnd||'—'}</span>
         </div>
       </div>
     </div>`;
@@ -928,7 +987,7 @@ function loadEst(day,city,file){
     const s=state[day][city];
     s.drivers=drivers; s.estLoaded=true; s._estFile=file.name;
     updateDot(day,city); buildMain();
-    setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); }, 50);
+    setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); autoSaveSession(); }, 50);
   };
   reader.readAsText(file);
 }
@@ -962,6 +1021,7 @@ function loadAct(day,city,file){
     }
     state[day][city].actLoaded=true; state[day][city]._actFile=file.name;
     updateDot(day,city); buildMain();
+    setTimeout(()=>autoSaveSession(), 100);
     setTimeout(()=>{
       const k=`${day}-${city}`;
       for(const name in state[day][city].drivers){
@@ -1159,6 +1219,9 @@ function compute(day,city,name){
     tB+=(c.actBoxes||state[day][city].drivers[n].stops);tE+=(c.estPay||0);tF+=(c.finalPay||0);
   }
   state[day][city]._totals={boxes:tB,est:tE,final:tF};
+  // debounced auto-save
+  clearTimeout(window._autoSaveTimer);
+  window._autoSaveTimer = setTimeout(()=>autoSaveSession(), 2000);
 
   // live-update summary row
   const srow=document.getElementById(`srow-${day}-${city}-${name}`);
@@ -2402,10 +2465,13 @@ function sendAllToDEXT(){
   }, 500);
 }
 
-// Firebase loads async — buildTabs and buildMain called inside loadArchiveFromStorage
+// Firebase loads async
 loadArchiveFromStorage();
-// Load driver details from Firebase automatically
-setTimeout(()=>loadDriverDetailsFromFirebase(), 1000);
+// Load driver details and last session from Firebase
+setTimeout(()=>{
+  loadDriverDetailsFromFirebase();
+  autoLoadSession();
+}, 1500);
 </script>
 </body>
 </html>
