@@ -2190,8 +2190,9 @@ function renderInvoice(){
         <div style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:#1b1c1e">
           ${fuelComp>0?`<div>⛽ Fuel Compensation &nbsp;<strong style="color:#1b1c1e">+${fmtMoney(fuelComp, 0)}</strong></div>`:''}
           ${frDeduction<0?`<div>📦 Charity donation pool ${(frRate*100).toFixed(2)}% &nbsp;<strong style="color:#c0392b">${frDeduction.toFixed(2)}</strong></div>`:''}
+          ${isGSTInvalid2?`<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #d8d2c4">💸 GST Removal (÷11) &nbsp;<strong style="color:#c0392b">-${fmtMoney(gstRemoval2)}</strong></div>`:''}
           <div style="font-size:16px;font-weight:800;color:var(--olive);margin-top:8px">Total due: ${fmtMoney(totalDue)}</div>
-          <div style="font-size:11px;opacity:0.7">GST inclusive: ${fmtMoney(gst)}</div>
+          <div style="font-size:11px;opacity:0.7">${isGSTInvalid2?'<span style=\"color:#c0392b\">GST Invalid — GST removed</span>':'GST inclusive: '+fmtMoney(gst)}</div>
         </div>
       </div>
     </div>`;
@@ -2408,11 +2409,12 @@ function generateInvoicePDF(name, city, invNum){
     </table>
     ${fuelComp>0?`<div class="inv-adj-row"><span><em>Fuel Compensation</em></span><span>Adjustments <span class="inv-adj-amt fuel">${fmtMoney(fuelComp)}</span></span></div>`:''}
     ${frDeduction<0?`<div class="inv-adj-row"><span><em>Charity donation pool ${(frRate*100).toFixed(2)}%</em></span><span class="inv-adj-amt charity">${frDeduction.toFixed(2)}</span></div>`:''}
+    ${isGSTInvalid?`<div class="inv-adj-row"><span><em>GST Removal (÷11)</em></span><span class="inv-adj-amt charity">-${fmtMoney(gstRemoval)}</span></div>`:''}
     <div class="inv-total-row">
       <span class="inv-total-label">Total due</span>
       <span class="inv-total-amt">${fmtMoney(totalDue)}</span>
     </div>
-    <div class="inv-gst">GST inclusive: ${fmtMoney(gst)}</div>
+    <div class="inv-gst">${isGSTInvalid?'<span style="color:#c0392b">GST Invalid — GST removed from total</span>':'GST inclusive: '+fmtMoney(gst)}</div>
   </div>`;
 
   // Show invoice in a full-screen modal overlay for printing
@@ -2557,11 +2559,11 @@ function buildInvoiceHTML(name,city,invNum){
     <table><thead><tr><th>Delivery Date</th><th>Qty</th><th>Unit price</th><th>Additional</th><th style="text-align:right">Total</th></tr></thead>
     <tbody>${lineItems.map(l=>`<tr><td><strong>${auDate(l.date)}</strong></td><td>${l.qty}</td><td>${fmtNum(l.unitPrice,1)}</td><td>${l.additional?fmtMoney(l.additional):'0'}</td><td style="text-align:right">${fmtMoney(l.total)}</td></tr>`).join('')}
     <tr class="inv-subtotal"><td>Subtotal</td><td>${totalBoxes}</td><td></td><td></td><td style="text-align:right">${fmtMoney(subtotal)}</td></tr></tbody></table>
-    ${isGSTInvalid?`<div class="inv-adj-row"><span><em>GST Removal (÷11)</em></span><span class="inv-adj-amt charity">-${fmtMoney(gstRemoval)}</span></div>`:''}
     ${fuelComp>0?`<div class="inv-adj-row"><span><em>Fuel Compensation</em></span><span>Adjustments <span class="inv-adj-amt fuel">${fmtMoney(fuelComp,0)}</span></span></div>`:''}
     ${frDeduction<0?`<div class="inv-adj-row"><span><em>Charity donation pool ${(frRate*100).toFixed(2)}%</em></span><span class="inv-adj-amt charity">${fmtNum(frDeduction)}</span></div>`:''}
+    ${isGSTInvalid?`<div class="inv-adj-row"><span><em>GST Removal (÷11)</em></span><span class="inv-adj-amt charity">-${fmtMoney(gstRemoval)}</span></div>`:''}
     <div class="inv-total-row"><span class="inv-total-label">Total due</span><span class="inv-total-amt">${fmtMoney(totalDue)}</span></div>
-    <div class="inv-gst">${isGSTInvalid?'<span style="color:#c0392b">GST Invalid — GST removed from subtotal</span>':'GST inclusive: '+fmtMoney(gst)}</div>
+    <div class="inv-gst">${isGSTInvalid?'<span style="color:#c0392b">GST Invalid — GST removed from total</span>':'GST inclusive: '+fmtMoney(gst)}</div>
   </div>`;
 }
 
