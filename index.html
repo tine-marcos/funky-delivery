@@ -467,8 +467,7 @@ async function autoLoadSession(){
       viewingArchiveIndex = -1;
       buildTabs();
       buildMain();
-      // IMPORTANT: reload archive AFTER session to not lose saved weeks
-      await loadArchiveFromFirebase();
+      // Note: archive is loaded separately in _onFirebaseReady — don't reload here
     }
   } catch(e){ console.error('Auto-load error:', e); }
 }
@@ -494,19 +493,25 @@ function updateWeekNav(){
   if(isArchive){
     const snap = weekArchive[viewingArchiveIndex];
     label.textContent = snap.label;
-    badge.textContent = 'ARCHIVED';
+    badge.textContent = 'ARCHIVED ('+(viewingArchiveIndex+1)+' of '+weekArchive.length+')';
     badge.className = 'week-badge archived';
   } else {
     // get tuesday date from current state
     const tueDates = CITIES.map(c=>state['Tuesday'][c]?.date).filter(Boolean);
     label.textContent = tueDates.length ? getWeekLabel(tueDates[0]) : 'Current Week';
-    badge.textContent = 'CURRENT';
+    badge.textContent = weekArchive.length>0 ? 'CURRENT ('+weekArchive.length+' archived)' : 'CURRENT';
     badge.className = 'week-badge current';
   }
 
-  prev.disabled = viewingArchiveIndex <= 0 && weekArchive.length === 0;
-  if(viewingArchiveIndex < 0) prev.disabled = weekArchive.length === 0;
-  else prev.disabled = viewingArchiveIndex <= 0;
+  // PREV (older) button: disable when there are no archives, or already viewing the OLDEST one
+  if(viewingArchiveIndex < 0){
+    // on current week — can go back if any archives exist
+    prev.disabled = weekArchive.length === 0;
+  } else {
+    // on an archived week — can go back if there's an older one
+    prev.disabled = viewingArchiveIndex >= weekArchive.length - 1;
+  }
+  // NEXT (newer) button: disable only when already on current week
   next.disabled = viewingArchiveIndex < 0;
 
   // archive count hidden
@@ -538,6 +543,7 @@ function startNewWeek(){
   savedCurrentState=null;
   savedCurrentFR=null;
   savedCurrentFuel=null;
+  savedCurrentInvoice=null;
   activeTab='Tuesday';
   // Clear auto-saved session
   localStorage.removeItem('funkyCurrentSession');
@@ -561,9 +567,23 @@ async function saveCurrentWeek(){
   const hasData = ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
   if(!hasData){ alert('No data loaded yet! Please upload CSVs before saving.'); return; }
 
-  if(!confirm('Save "'+label+'" to archive? You can still view it later.')) return;
+  // Stable ID derived from the Tuesday date — so re-saving the SAME week overwrites
+  // (instead of creating a new doc each time). Falls back to label if no Tuesday date.
+  const tueDate = tueDates[0] || '';
+  const stableId = tueDate
+    ? 'week_'+tueDate                                       // e.g. "week_2026-04-28"
+    : 'week_'+label.replace(/[^a-zA-Z0-9]/g,'_');           // fallback
+
+  // Check if a week with this label/id already exists in archive
+  const existingIdx = weekArchive.findIndex(w => (w._id===stableId) || (w.label===label));
+  if(existingIdx >= 0){
+    if(!confirm('"'+label+'" is already saved. Overwrite with the latest data?')) return;
+  } else {
+    if(!confirm('Save "'+label+'" to archive? You can still view it later.')) return;
+  }
 
   const snapshot = {
+    _id: stableId,
     label,
     savedAt: new Date().toISOString(),
     state: JSON.parse(JSON.stringify(state)),
@@ -574,15 +594,42 @@ async function saveCurrentWeek(){
 
   // Save to Firebase + localStorage backup
   try {
+    // Remove any existing entry for this same week (label match), then add updated one
+    for(let i=weekArchive.length-1; i>=0; i--){
+      if(weekArchive[i].label===label || weekArchive[i]._id===stableId){
+        weekArchive.splice(i,1);
+      }
+    }
     weekArchive.unshift(snapshot);
+    weekArchive.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+
     // Save to localStorage as backup
     try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
-    // Save to Firebase
+
+    // Save to Firebase using the STABLE id (overwrites instead of duplicates)
     if(window._firebaseReady && window._db){
-      const { doc, setDoc } = window._firestoreFns;
-      const weekId = 'week_' + snapshot.savedAt.replace(/[:.]/g,'_');
-      await setDoc(doc(window._db, 'weekArchive', weekId), snapshot);
-      console.log('Saved to Firebase:', weekId);
+      const { doc, setDoc, getDocs, collection, deleteDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'weekArchive', stableId), snapshot);
+      console.log('Saved to Firebase:', stableId);
+
+      // Clean up any older duplicate documents for this same week (different label match)
+      try {
+        const allDocs = await getDocs(collection(window._db, 'weekArchive'));
+        const toDelete = [];
+        allDocs.forEach(d => {
+          const data = d.data();
+          if(d.id !== stableId && data.label === label){
+            toDelete.push(d.id);
+          }
+        });
+        for(const id of toDelete){
+          await deleteDoc(doc(window._db, 'weekArchive', id));
+          console.log('🗑 Deleted duplicate:', id);
+        }
+        if(toDelete.length){
+          console.log('Cleaned up '+toDelete.length+' old duplicate(s) of "'+label+'"');
+        }
+      } catch(e){ console.warn('Duplicate cleanup skipped:', e); }
     }
     alert('✅ Week saved! Synced across all browsers and devices.');
     updateWeekNav();
@@ -592,10 +639,48 @@ async function saveCurrentWeek(){
   }
 }
 
+// One-time cleanup: scan archive and delete duplicate docs (same label),
+// keeping only the most recent savedAt for each unique week.
+async function dedupeArchiveOnce(){
+  if(!window._firebaseReady || !window._db) return;
+  try {
+    const { getDocs, collection, deleteDoc, doc } = window._firestoreFns;
+    const snap = await getDocs(collection(window._db, 'weekArchive'));
+    const byLabel = {}; // label -> {id, savedAt}
+    const toDelete = [];
+    snap.forEach(d => {
+      const data = d.data();
+      const lbl = data.label || d.id;
+      if(!byLabel[lbl]){
+        byLabel[lbl] = { id: d.id, savedAt: data.savedAt||'' };
+      } else {
+        // Keep the newer one, mark older for deletion
+        const existing = byLabel[lbl];
+        if((data.savedAt||'') > (existing.savedAt||'')){
+          toDelete.push(existing.id);
+          byLabel[lbl] = { id: d.id, savedAt: data.savedAt||'' };
+        } else {
+          toDelete.push(d.id);
+        }
+      }
+    });
+    if(!toDelete.length){ console.log('✓ No duplicate weeks to clean up'); return; }
+    console.log('🧹 Cleaning up '+toDelete.length+' duplicate week archive(s)...');
+    for(const id of toDelete){
+      await deleteDoc(doc(window._db, 'weekArchive', id));
+    }
+    console.log('✓ Cleanup done. Reloading archive...');
+    await loadArchiveFromFirebase();
+  } catch(e){ console.error('Dedupe error:', e); }
+}
+// Expose so you can manually run it from the console: dedupeArchiveOnce()
+window.dedupeArchiveOnce = dedupeArchiveOnce;
+
 // Store current week state when navigating away
 let savedCurrentState = null;
 let savedCurrentFR = null;
 let savedCurrentFuel = null;
+let savedCurrentInvoice = null;
 
 function navigateWeek(dir){
   if(dir === -1){
@@ -604,6 +689,7 @@ function navigateWeek(dir){
       savedCurrentState = JSON.parse(JSON.stringify(state));
       savedCurrentFR = JSON.parse(JSON.stringify(frState));
       savedCurrentFuel = JSON.parse(JSON.stringify(fuelVehicleType));
+      savedCurrentInvoice = JSON.parse(JSON.stringify(invoiceSettings));
       viewingArchiveIndex = 0;
     } else {
       viewingArchiveIndex = Math.min(viewingArchiveIndex+1, weekArchive.length-1);
@@ -631,6 +717,10 @@ function navigateWeek(dir){
     Object.assign(frState, JSON.parse(JSON.stringify(snap.frState||{})));
     Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
     Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(snap.fuelVehicleType||{})));
+    if(snap.invoiceSettings){
+      Object.keys(invoiceSettings).forEach(k=>delete invoiceSettings[k]);
+      Object.assign(invoiceSettings, JSON.parse(JSON.stringify(snap.invoiceSettings)));
+    }
   } else {
     // back to current — restore saved current state
     if(savedCurrentState){
@@ -644,6 +734,10 @@ function navigateWeek(dir){
       if(savedCurrentFR) Object.assign(frState, JSON.parse(JSON.stringify(savedCurrentFR)));
       Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
       if(savedCurrentFuel) Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(savedCurrentFuel)));
+      if(savedCurrentInvoice){
+        Object.keys(invoiceSettings).forEach(k=>delete invoiceSettings[k]);
+        Object.assign(invoiceSettings, JSON.parse(JSON.stringify(savedCurrentInvoice)));
+      }
     }
   }
 
@@ -663,18 +757,19 @@ async function loadArchiveFromFirebase(){
     if(window._firebaseReady && window._db){
       const { getDocs, collection } = window._firestoreFns;
       const snapshot = await getDocs(collection(window._db, 'weekArchive'));
-      weekArchive = [];
-      snapshot.forEach(d => weekArchive.push(d.data()));
-      weekArchive.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+      const loaded = [];
+      snapshot.forEach(d => loaded.push(d.data()));
+      loaded.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+      weekArchive = loaded;
       // Sync to localStorage
       try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
-      console.log('Loaded '+weekArchive.length+' weeks from Firebase ☁️');
+      console.log('☁️ Loaded '+weekArchive.length+' weeks from Firebase. Labels:', weekArchive.map(w=>w.label));
       updateWeekNav();
     } else {
       // Fallback localStorage
       try {
         const saved = localStorage.getItem('funkyDeliveryArchive');
-        if(saved){ weekArchive = JSON.parse(saved); updateWeekNav(); }
+        if(saved){ weekArchive = JSON.parse(saved); console.log('💾 Loaded '+weekArchive.length+' weeks from localStorage'); updateWeekNav(); }
       } catch(e){}
     }
   } catch(e) {
@@ -2499,11 +2594,17 @@ function sendAllToDEXT(){
 loadArchiveFromStorage();
 
 // When Firebase is ready, reload everything from cloud
-window._onFirebaseReady = function(){
+window._onFirebaseReady = async function(){
   console.log('Firebase ready — loading cloud data...');
-  loadArchiveFromFirebase();
+  // Load archive FIRST so weekArchive is populated before anything else
+  await loadArchiveFromFirebase();
+  // Auto-clean up any duplicate weeks (same label, multiple docs) — keeps only newest per week
+  await dedupeArchiveOnce();
   loadDriverDetailsFromFirebase();
-  setTimeout(()=>autoLoadSession(), 800);
+  // Then load session — but DON'T let it call loadArchiveFromFirebase again
+  await autoLoadSession();
+  // Refresh nav now that everything is loaded
+  updateWeekNav();
 };
 
 // If Firebase was already ready before this ran (unlikely but safe)
