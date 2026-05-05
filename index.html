@@ -2377,7 +2377,7 @@ function generateInvoicePDF(name, city, invNum){
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div style="color:white;font-family:'Sora',sans-serif;font-weight:700;font-size:15px">🧾 Invoice #${invNum} — ${name}</div>
         <div style="display:flex;gap:10px">
-          <button onclick="window.print()" style="background:#2d6a4f;color:white;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button>
+          <button onclick="printInvoiceWithName('${name.replace(/'/g, "\\'")}','${invNum}')" style="background:#2d6a4f;color:white;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button>
           <button onclick="document.getElementById('invoiceModal').remove()" style="background:#555;color:white;border:none;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px">✕ Close</button>
         </div>
       </div>
@@ -2428,7 +2428,7 @@ function generateAllInvoices(city){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="color:white;font-family:'Sora',sans-serif;font-weight:700;font-size:14px">🧾 All ${city} Invoices — ${invoices.length} drivers</div>
       <div style="display:flex;gap:8px">
-        <button onclick="window.print()" style="background:#2d5a3d;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">🖨 Print All as PDF</button>
+        <button onclick="printAllInvoicesWithName('${city}')" style="background:#2d5a3d;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">🖨 Print All as PDF</button>
         <button onclick="sendAllToDEXT()" style="background:#1a237e;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">📤 Send All to DEXT</button>
         <button onclick="document.getElementById('invoiceModal').remove()" style="background:#555;color:white;border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px">✕ Close</button>
       </div>
@@ -2512,6 +2512,37 @@ function buildInvoiceHTML(name,city,invNum){
     <div class="inv-total-row"><span class="inv-total-label">Total due</span><span class="inv-total-amt">${fmtMoney(totalDue)}</span></div>
     <div class="inv-gst">${isGSTInvalid?'<span style="color:#c0392b">GST Invalid — GST removed from total</span>':'GST inclusive: '+fmtMoney(gst)}</div>
   </div>`;
+}
+
+// ── PRINT WITH SMART FILENAME ────────────────────────────────────────────────
+// Browsers use document.title as the suggested filename when "Save as PDF".
+// We temporarily swap the title around window.print() so the user gets a
+// pre-filled, sensible filename instead of the generic page title.
+function printInvoiceWithName(name, invNum){
+  const original = document.title;
+  // Sanitize: replace characters that are problematic in filenames
+  const safeName = (name || 'Driver').replace(/[\\/:*?"<>|]/g, '').trim();
+  const safeInv  = (invNum || '').toString().replace(/[\\/:*?"<>|]/g, '').trim();
+  document.title = `${safeName} - Invoice ${safeInv}`;
+  setTimeout(()=>{
+    window.print();
+    // Restore after the print dialog closes
+    setTimeout(()=>{ document.title = original; }, 500);
+  }, 50);
+}
+
+function printAllInvoicesWithName(city){
+  const original = document.title;
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2,'0');
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const yyyy = today.getFullYear();
+  const safeCity = (city || 'All').replace(/[\\/:*?"<>|]/g, '').trim();
+  document.title = `Funky Food - ${safeCity} Invoices - ${dd}-${mm}-${yyyy}`;
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{ document.title = original; }, 500);
+  }, 50);
 }
 
 // ── DEXT EMAIL ────────────────────────────────────────────────────────────────
