@@ -451,7 +451,7 @@ async function autoLoadSession(){
       if(saved) sessionData = JSON.parse(saved);
     }
     if(sessionData && sessionData.state){
-      // Restore state
+      // Restore ONLY current week state — never touch weekArchive
       ALL_DAYS.forEach(day=>{
         DAY_CITIES[day].forEach(city=>{
           if(sessionData.state[day]&&sessionData.state[day][city]){
@@ -462,10 +462,13 @@ async function autoLoadSession(){
       if(sessionData.frState) Object.assign(frState, sessionData.frState);
       if(sessionData.fuelVehicleType) Object.assign(fuelVehicleType, sessionData.fuelVehicleType);
       if(sessionData.invoiceSettings) Object.assign(invoiceSettings, sessionData.invoiceSettings);
-      console.log('Session restored!');
+      console.log('Current session restored!');
+      // Reset to current week view before rebuilding
+      viewingArchiveIndex = -1;
       buildTabs();
       buildMain();
-      updateWeekNav();
+      // IMPORTANT: reload archive AFTER session to not lose saved weeks
+      await loadArchiveFromFirebase();
     }
   } catch(e){ console.error('Auto-load error:', e); }
 }
