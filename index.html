@@ -1590,15 +1590,21 @@ function renderWeekly(){
         <thead><tr>
           <th>Driver</th><th>Days</th><th>Boxes</th>
           <th>Delivery Costs</th><th>${colHeader}</th>
-          <th>⛽ Fuel Comp</th><th>Net Pay</th>
+          <th>⛽ Fuel Comp</th><th>💸 GST (÷11)</th><th>Net Pay</th>
         </tr></thead>
         <tbody>`;
+    let totalGSTRemoval = 0;
     cityDrivers.forEach(d => {
       const frDeduction = cityTotal > 0 ? d.finalPay * frRate : 0;
       const fuelComp = driverFuel[d.name]||0;
-      const netPay = d.finalPay + frDeduction + fuelComp;
+      const det = (driverDetails[city]&&driverDetails[city][d.name])||{};
+      const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
+      const beforeGST = d.finalPay + frDeduction + fuelComp;
+      const gstRemoval = isGSTInvalid ? beforeGST / 11 : 0;
+      const netPay = beforeGST - gstRemoval;
+      totalGSTRemoval += gstRemoval;
       html += `<tr>
-        <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${d.name}</td>
+        <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${d.name}${isGSTInvalid?' <span style="font-size:9px;color:#c0392b;font-weight:600">GST INV</span>':''}</td>
         <td>${d.days}</td>
         <td>${d.boxes}</td>
         <td>${fmtMoney(d.finalPay)}</td>
@@ -1608,18 +1614,22 @@ function renderWeekly(){
         <td style="color:#5a5a5a">
           ${fuelComp>0?'+$'+Math.round(fuelComp):'—'}
         </td>
+        <td style="${gstRemoval>0?'color:#c0392b':'color:#5a5a5a'}">
+          ${gstRemoval>0?'-'+fmtMoney(gstRemoval):'—'}
+        </td>
         <td style="color:#1b1c1e">${fmtMoney(netPay)}</td>
       </tr>`;
     });
     // totals row
     const totalFRDeduction = cityTotal > 0 ? cityTotal * frRate : 0;
-    const grandNet = cityTotal + totalFRDeduction + totalFuelComp;
+    const grandNet = cityTotal + totalFRDeduction + totalFuelComp - totalGSTRemoval;
     html += `
       <tfoot><tr style="background:var(--olive-pale);color:#1b1c1e">
         <td>TOTAL</td><td>—</td><td>${cityBoxes}</td>
         <td>${fmtMoney(cityTotal)}</td>
         <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
         <td>${totalFuelComp>0?'+$'+Math.round(totalFuelComp):'—'}</td>
+        <td style="${totalGSTRemoval>0?'color:#c0392b':''}">${totalGSTRemoval>0?'-'+fmtMoney(totalGSTRemoval):'—'}</td>
         <td>${fmtMoney(grandNet)}</td>
       </tr></tfoot>
     </tbody></table>
@@ -2081,6 +2091,31 @@ function renderInvoice(){
           : 'Upload a CSV with driver company details'}
       </span>
     </div>
+    ${(() => {
+      if(!Object.keys(driverDetails).length) return '';
+      const invalidByCity = {};
+      let totalInvalid = 0, totalValid = 0;
+      Object.keys(driverDetails).forEach(c=>{
+        Object.keys(driverDetails[c]).forEach(n=>{
+          const isInv = (driverDetails[c][n].gst||'').toUpperCase().includes('INVALID');
+          if(isInv){
+            if(!invalidByCity[c]) invalidByCity[c]=[];
+            invalidByCity[c].push(n);
+            totalInvalid++;
+          } else { totalValid++; }
+        });
+      });
+      const cityRows = Object.keys(invalidByCity).map(c=>
+        `<div style="margin-bottom:6px"><strong style="color:var(--olive);font-size:11px">${c}:</strong> <span style="font-size:11px;color:#c0392b">${invalidByCity[c].join(', ')}</span></div>`
+      ).join('');
+      return `<div style="padding:12px 20px;background:var(--cream);border-top:1px solid var(--border);font-family:'Sora',sans-serif">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap">
+          <span>✅ <strong>${totalValid}</strong> GST Valid</span>
+          <span>💸 <strong style="color:#c0392b">${totalInvalid}</strong> GST Invalid (will have GST÷11 removed)</span>
+        </div>
+        ${totalInvalid>0 ? cityRows : '<div style="font-size:11px;color:var(--text-muted)">No drivers flagged as GST Invalid.</div>'}
+      </div>`;
+    })()}
   </div>`;
 
   // Per driver invoice cards for active city
