@@ -796,7 +796,6 @@ function renderPayPreview(){
     let bonusLabel = '';
     if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
     else if(name==='Angus'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
-    else if(name==='Dasharath'&&previewCity==='Melbourne'&&previewDay==='Friday') bonusLabel='Weekly bonus';
     else if(previewCity==='Sydney') bonusLabel='Gate fee';
 
     html+=`<div class="preview-card">
@@ -1209,7 +1208,6 @@ function getFixedBonusLabel(day, city, name){
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
   if(name==='Angus' && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
-  if(name==='Dasharath' && city==='Melbourne' && day==='Friday') labels.push('+$50.00 (weekly bonus)');
   if(city==='Sydney') labels.push('+$12.00 (gate fee)');
   return labels.length ? labels.join(' · ') : null;
 }
@@ -1244,9 +1242,7 @@ function compute(day,city,name){
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
   // Rule 2: Angus / Brisbane / Friday → Final Per Box forced to $8.00
   if(name==='Angus' && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
-  // Rule 3: Dasharath / Melbourne / Friday → +$50
-  if(name==='Dasharath' && city==='Melbourne' && day==='Friday') fixedBonus += 50;
-  // Rule 4: All Sydney drivers / Every day → +$12 market gate fee
+  // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
   if(city==='Sydney') fixedBonus += 12;
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1517,6 +1513,7 @@ function renderWeekly(){
         }
       });
       for(const name in driverKM){
+        if(isFuelExempt(name)){ driverFuel[name] = 0; continue; }
         const vtype = (fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
         const rates = FUEL_RATES[vtype];
         const km = driverKM[name];
@@ -1839,15 +1836,17 @@ function renderFuel(){
     const rates = FUEL_RATES[vtype];
     const km = driverKM[name];
     const litres = (km / 100) * rates.economy;
-    const comp = (rates.newPrice - rates.base) * litres * REIMBURSE_RATE;
+    const exempt = isFuelExempt(name);
+    const comp = exempt ? 0 : (rates.newPrice - rates.base) * litres * REIMBURSE_RATE;
     totalComp += comp;
 
     const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
-    html += `<tr>
-      <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
+    html += `<tr${exempt?' style="opacity:0.55"':''}>
+      <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}${exempt?' <span style="font-size:10px;font-family:\'DM Mono\',monospace;color:#c0392b;background:#fdecea;padding:2px 6px;border-radius:4px;margin-left:6px">FUEL EXEMPT</span>':''}</td>
       <td>
         <select id="${selId}" onchange="setFuelType('${city}','${name}',this.value)"
-          style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:white;color:var(--olive);cursor:pointer">
+          ${exempt?'disabled':''}
+          style="font-family:'DM Mono',monospace;font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:white;color:var(--olive);cursor:${exempt?'not-allowed':'pointer'}">
           <option value="Diesel"${vtype==='Diesel'?' selected':''}>Diesel</option>
           <option value="Petrol"${vtype==='Petrol'?' selected':''}>Petrol</option>
         </select>
@@ -1856,7 +1855,7 @@ function renderFuel(){
       <td style="text-align:right">${fmtMoney(rates.base)}</td>
       <td style="text-align:right">${fmtMoney(rates.newPrice)}</td>
       <td style="text-align:right">${litres.toFixed(1)}</td>
-      <td style="text-align:right;color:#1b1c1e">${fmtMoney(comp, 0)}</td>
+      <td style="text-align:right;color:#1b1c1e">${exempt?'—':fmtMoney(comp, 0)}</td>
     </tr>`;
   }
 
@@ -1990,6 +1989,7 @@ function renderInvoice(){
             onchange="invoiceSettings.submittedOn=this.value;
               const d=new Date(this.value);d.setDate(d.getDate()+7);
               invoiceSettings.dueDate=d.toISOString().split('T')[0];
+              autoSaveSession();
               renderInvoice()">
         </div>
         <div class="config-card">
@@ -1999,17 +1999,17 @@ function renderInvoice(){
         <div class="config-card">
           <label>Invoice # Start</label>
           <input type="text" id="inv-start" value="${invoiceSettings.invoiceStart}"
-            onchange="invoiceSettings.invoiceStart=this.value">
+            onchange="invoiceSettings.invoiceStart=this.value;autoSaveSession();renderInvoice()">
         </div>
         <div class="config-card">
           <label>Delivery Date From</label>
           <input type="date" id="inv-dateFrom" value="${invoiceSettings.dateFrom||''}"
-            onchange="invoiceSettings.dateFrom=this.value">
+            onchange="invoiceSettings.dateFrom=this.value;autoSaveSession();renderInvoice()">
         </div>
         <div class="config-card">
           <label>Delivery Date To</label>
           <input type="date" id="inv-dateTo" value="${invoiceSettings.dateTo||''}"
-            onchange="invoiceSettings.dateTo=this.value">
+            onchange="invoiceSettings.dateTo=this.value;autoSaveSession();renderInvoice()">
         </div>
       </div>
     </div>
@@ -2152,7 +2152,17 @@ function renderInvoice(){
   main.innerHTML = html;
 }
 
+// ── FUEL EXEMPTION RULE ──────────────────────────────────────────────────────
+// Drivers whose name has "Funky" as their second word (e.g. "John Funky Smith")
+// are not eligible for fuel compensation/reimbursement.
+function isFuelExempt(name){
+  if(!name) return false;
+  const parts = String(name).trim().split(/\s+/);
+  return parts.length >= 2 && parts[1].toLowerCase() === 'funky';
+}
+
 function driverFuelComp(name, city){
+  if(isFuelExempt(name)) return 0;
   if(!fuelVehicleType[city]) return 0;
   let km=0;
   ALL_DAYS.forEach(day=>{
