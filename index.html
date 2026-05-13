@@ -1516,9 +1516,10 @@ function renderWeekly(){
         if(isFuelExempt(name)){ driverFuel[name] = 0; continue; }
         const vtype = (fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
         const rates = FUEL_RATES[vtype];
+        const base = getFuelBase(vtype, city);
         const km = driverKM[name];
         const litres = (km/100)*rates.economy;
-        const comp = (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
+        const comp = (rates.newPrice-base)*litres*REIMBURSE_RATE;
         driverFuel[name] = comp;
       }
     }
@@ -1746,10 +1747,20 @@ function loadFoodReliefCSV(day,city,event){
 
 // ── FUEL REIMBURSEMENT ────────────────────────────────────────────────────────
 const FUEL_RATES = {
-  Diesel: { base: 1.90, newPrice: 3.04, economy: 13 },
-  Petrol: { base: 1.80, newPrice: 2.50, economy: 16 }
+  Diesel: { base: 2.05, newPrice: 3.04, economy: 13 },
+  Petrol: {
+    base: { Sydney: 1.736, Melbourne: 1.734, Brisbane: 1.737 },
+    newPrice: 2.50,
+    economy: 16
+  }
 };
 const REIMBURSE_RATE = 0.50;
+// Resolve the base price for a vehicle type in a given city.
+// Diesel is flat across cities; Petrol varies by city.
+function getFuelBase(vtype, city){
+  const b = FUEL_RATES[vtype].base;
+  return (typeof b === 'object') ? b[city] : b;
+}
 
 function setFuelType(city, name, value){
   if(!fuelVehicleType[city]) fuelVehicleType[city]={};
@@ -1809,8 +1820,8 @@ function renderFuel(){
         <th>Vehicle Type</th><th>Economy (L/100km)</th><th>Base Price ($)</th><th>New Price ($)</th>
       </tr></thead>
       <tbody>
-        <tr><td style="color:#1b1c1e">Diesel</td><td>13</td><td>$1.90</td><td>$3.04</td></tr>
-        <tr><td style="color:#1b1c1e">Petrol</td><td>16</td><td>$1.80</td><td>$2.50</td></tr>
+        <tr><td style="color:#1b1c1e">Diesel</td><td>13</td><td>${fmtMoney(FUEL_RATES.Diesel.base)}</td><td>${fmtMoney(FUEL_RATES.Diesel.newPrice)}</td></tr>
+        <tr><td style="color:#1b1c1e">Petrol</td><td>16</td><td>${fmtMoney(getFuelBase('Petrol', city))}</td><td>${fmtMoney(FUEL_RATES.Petrol.newPrice)}</td></tr>
       </tbody>
     </table>
     </div>
@@ -1834,10 +1845,11 @@ function renderFuel(){
     if(!fuelVehicleType[city][name]) fuelVehicleType[city][name] = 'Diesel';
     const vtype = fuelVehicleType[city][name];
     const rates = FUEL_RATES[vtype];
+    const base = getFuelBase(vtype, city);
     const km = driverKM[name];
     const litres = (km / 100) * rates.economy;
     const exempt = isFuelExempt(name);
-    const comp = exempt ? 0 : (rates.newPrice - rates.base) * litres * REIMBURSE_RATE;
+    const comp = exempt ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
     totalComp += comp;
 
     const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
@@ -1852,7 +1864,7 @@ function renderFuel(){
         </select>
       </td>
       <td style="text-align:right">${Math.round(km)}</td>
-      <td style="text-align:right">${fmtMoney(rates.base)}</td>
+      <td style="text-align:right">${fmtMoney(base)}</td>
       <td style="text-align:right">${fmtMoney(rates.newPrice)}</td>
       <td style="text-align:right">${litres.toFixed(1)}</td>
       <td style="text-align:right;color:#1b1c1e">${exempt?'—':fmtMoney(comp, 0)}</td>
@@ -1891,10 +1903,11 @@ function exportFuel(){
   for(const name in driverKM){
     const vtype = fuelVehicleType[city][name]||'Diesel';
     const rates = FUEL_RATES[vtype];
+    const base = getFuelBase(vtype, city);
     const km = driverKM[name];
     const litres = (km/100)*rates.economy;
-    const comp = (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
-    csv += [name,city,vtype,Math.round(km),rates.base,rates.newPrice,litres.toFixed(1),Math.round(comp)].join(',')+'\n';
+    const comp = (rates.newPrice-base)*litres*REIMBURSE_RATE;
+    csv += [name,city,vtype,Math.round(km),base,rates.newPrice,litres.toFixed(1),Math.round(comp)].join(',')+'\n';
   }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
@@ -2171,8 +2184,9 @@ function driverFuelComp(name, city){
   });
   const vtype=(fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
   const rates=FUEL_RATES[vtype];
+  const base=getFuelBase(vtype, city);
   const litres=(km/100)*rates.economy;
-  return (rates.newPrice-rates.base)*litres*REIMBURSE_RATE;
+  return (rates.newPrice-base)*litres*REIMBURSE_RATE;
 }
 
 function setDriverDetail(city, name, field, value){
