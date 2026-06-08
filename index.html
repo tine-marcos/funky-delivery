@@ -467,6 +467,8 @@ async function autoLoadSession(){
       buildTabs();
       buildMain();
       updateWeekNav();
+      // Re-run compute for all drivers so fixed-rate rules apply immediately on load
+      ALL_DAYS.forEach(day=>{ DAY_CITIES[day].forEach(city=>{ recomputeAll(day,city); }); });
     }
   } catch(e){ console.error('Auto-load error:', e); }
 }
