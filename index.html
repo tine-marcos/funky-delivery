@@ -795,7 +795,7 @@ function renderPayPreview(){
     // fixed bonus label
     let bonusLabel = '';
     if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
-    else if(name==='Angus'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
+    else if((name==='Angus'||name==='Dee Dee')&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
     else if(previewCity==='Sydney') bonusLabel='Gate fee';
 
     html+=`<div class="preview-card">
@@ -1207,7 +1207,7 @@ function getFixedRate(city, name){
 function getFixedBonusLabel(day, city, name){
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
-  if(name==='Angus' && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
+  if((name==='Angus'||name==='Dee Dee') && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
   if(city==='Sydney') labels.push('+$12.00 (gate fee)');
   return labels.length ? labels.join(' · ') : null;
 }
@@ -1240,8 +1240,8 @@ function compute(day,city,name){
   let fixedBonus = 0;
   // Rule 1: Lakmal / Brisbane / Friday → +$125
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
-  // Rule 2: Angus / Brisbane / Friday → Final Per Box forced to $8.00
-  if(name==='Angus' && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
+  // Rule 2: Angus / Dee Dee / Brisbane / Friday → Final Per Box forced to $8.00
+  if((name==='Angus'||name==='Dee Dee') && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
   // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
   if(city==='Sydney') fixedBonus += 12;
   // ─────────────────────────────────────────────────────────────────────────────
