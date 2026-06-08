@@ -361,6 +361,14 @@ const ALL_DAYS  = ['Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DAY_NUMS  = {Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6};
 const CITIES    = Object.keys(CITY_CFG);
 
+// ── FIXED $8/BOX — Brisbane Friday ───────────────────────────────────────────
+// Drivers get fixed $8.00 Final Per Box on Brisbane Friday if:
+//   (a) their name is in this list, OR
+//   (b) their name contains "$8" anywhere (e.g. "SomeDriver $8")
+const BNE_FRI_FIXED8 = new Set(['Angus','DeeDeeHo']);
+function isBneFriFixed8(name){ return BNE_FRI_FIXED8.has(name) || name.includes('$8'); }
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DAY_CITIES = {};
 ALL_DAYS.forEach(day => { DAY_CITIES[day] = CITIES.filter(c => CITY_CFG[c].days.includes(day)); });
 
@@ -467,8 +475,8 @@ async function autoLoadSession(){
       buildTabs();
       buildMain();
       updateWeekNav();
-      // Re-run compute for all drivers so fixed-rate rules apply immediately on load
-      ALL_DAYS.forEach(day=>{ DAY_CITIES[day].forEach(city=>{ recomputeAll(day,city); }); });
+      // Re-run compute after DOM renders so fixed-rate rules apply on load
+      setTimeout(()=>{ ALL_DAYS.forEach(day=>{ DAY_CITIES[day].forEach(city=>{ recomputeAll(day,city); }); }); }, 100);
     }
   } catch(e){ console.error('Auto-load error:', e); }
 }
@@ -797,7 +805,7 @@ function renderPayPreview(){
     // fixed bonus label
     let bonusLabel = '';
     if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
-    else if((name==='Angus'||name==='DeeDeeHo')&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
+    else if(isBneFriFixed8(name)&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
     else if(previewCity==='Sydney') bonusLabel='Gate fee';
 
     html+=`<div class="preview-card">
@@ -1209,7 +1217,7 @@ function getFixedRate(city, name){
 function getFixedBonusLabel(day, city, name){
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
-  if((name==='Angus'||name==='DeeDeeHo') && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
+  if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
   if(city==='Sydney') labels.push('+$12.00 (gate fee)');
   return labels.length ? labels.join(' · ') : null;
 }
@@ -1242,8 +1250,8 @@ function compute(day,city,name){
   let fixedBonus = 0;
   // Rule 1: Lakmal / Brisbane / Friday → +$125
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
-  // Rule 2: Angus / DeeDeeHo / Brisbane / Friday → Final Per Box forced to $8.00
-  if((name==='Angus'||name==='DeeDeeHo') && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
+  // Rule 2: BNE_FRI_FIXED8 drivers / Brisbane / Friday → Final Per Box forced to $8.00
+  if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
   // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
   if(city==='Sydney') fixedBonus += 12;
   // ─────────────────────────────────────────────────────────────────────────────
