@@ -806,10 +806,7 @@ function renderPayPreview(){
     let bonusLabel = '';
     if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
     else if(isBneFriFixed8(name)&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
-    else if(previewCity==='Sydney'){
-      const sydExtra = state[previewDay]?.[previewCity]?._sydBonus||0;
-      bonusLabel = sydExtra>0&&['Wednesday','Thursday','Friday','Saturday'].includes(previewDay) ? 'Gate fee + extra' : 'Gate fee';
-    }
+    else if(previewCity==='Sydney') bonusLabel='Gate fee';
 
     html+=`<div class="preview-card">
       <div class="preview-header">
@@ -1000,7 +997,6 @@ function buildCityBody(day, city) {
       </div>
       <div class="config-card"><label>Rate / hr ($)</label><input type="number" id="rate-${key}" value="${s._rate||62}" step="0.01" oninput="s['${day}']['${city}']._rate=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
       <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
-      ${city==='Sydney' && ['Wednesday','Thursday','Friday','Saturday'].includes(day) ? `<div class="config-card"><label>SYD Extra Bonus ($)</label><input type="number" id="sydbonus-${key}" value="${s._sydBonus||0}" step="0.01" min="0" oninput="s['${day}']['${city}']._sydBonus=parseFloat(this.value)||0;recomputeAll('${day}','${city}')"></div>` : ''}
     </div>
     <div id="driverArea-${key}">
       ${s.estLoaded ? buildDriverCards(day,city) : `<div class="empty-state"><div class="emoji">🌱</div><p>Upload Estimated CSV to get started</p><small>Then upload Actuals CSV to auto-fill times</small></div>`}
@@ -1152,13 +1148,22 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
           <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
-          <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
-            ${getFixedBonusLabel(day,city,name)
-              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
-              : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
-            }
-            ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
-          </div>
+          ${city==='Sydney' && ['Wednesday','Thursday','Friday','Saturday'].includes(day)
+            ? `<div class="field-group"><label>Gate Fee 🔒</label>
+                <div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">+$12.00 (gate fee)</div>
+                <input type="hidden" id="${key}_${name}_bonus" value="0">
+              </div>
+              <div class="field-group"><label>Extra Bonus ($) ✎</label>
+                <input type="number" class="tag-input" id="${key}_${name}_sydextra" value="${c._sydExtra||0}" step="0.01" min="0" oninput="compute('${day}','${city}','${name}')">
+              </div>`
+            : `<div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
+                ${getFixedBonusLabel(day,city,name)
+                  ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
+                  : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
+                }
+                ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
+              </div>`
+          }
         </div>
         <div class="results-strip">
           <div class="result-item"><div class="r-label">Est Pay</div><div class="r-val" id="${key}_${name}_estPay">${c.estPay?'$'+c.estPay.toFixed(2):'—'}</div></div>
@@ -1222,13 +1227,7 @@ function getFixedBonusLabel(day, city, name){
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
-  if(city==='Sydney'){
-    labels.push('+$12.00 (gate fee)');
-    const sydExtra = state[day]?.[city]?._sydBonus||0;
-    if(sydExtra>0 && ['Wednesday','Thursday','Friday','Saturday'].includes(day)){
-      labels.push(`+$${sydExtra.toFixed(2)} (extra bonus)`);
-    }
-  }
+  if(city==='Sydney') labels.push('+$12.00 (gate fee)');
   return labels.length ? labels.join(' · ') : null;
 }
 
@@ -1264,9 +1263,11 @@ function compute(day,city,name){
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
   // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
   if(city==='Sydney') fixedBonus += 12;
-  // Rule 4: Sydney drivers / Wed–Sat → +extra bonus (configurable per day)
+  // Rule 4: Sydney drivers / Wed–Sat → +extra bonus per driver (editable)
   if(city==='Sydney' && ['Wednesday','Thursday','Friday','Saturday'].includes(day)){
-    fixedBonus += s._sydBonus||0;
+    const sydExtra = parseFloat(document.getElementById(`${key}_${name}_sydextra`)?.value)||0;
+    fixedBonus += sydExtra;
+    d._c._sydExtra = sydExtra;
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
