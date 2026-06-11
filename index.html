@@ -1187,7 +1187,7 @@ function buildCitySummary(day,city){
   let totB=0,totE=0,totF=0, rows='';
   for(const name in drivers){
     const c=drivers[name]._c||{}, boxes=c.actBoxes||drivers[name].stops;
-    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=c.bonus||0;
+    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=(c.bonus||0)+(c.fixedBonus||0);
     totB+=boxes;totE+=ep;totF+=fp;
     const speed = c.speed!=null?Math.round(c.speed)+'%':'—';
     const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b' : 'color:#569556';
@@ -1416,7 +1416,7 @@ function renderWeekly(){
         const estHrs=d.depotStart&&d.depotEnd?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
         const actFirst=cv._actFirst||'—';
         const actLast=cv._actLast||'—';
-        const bonus=cv.bonus||0;
+        const bonus=(cv.bonus||0)+(cv.fixedBonus||0);
         const estPay=cv.estPay||0;
         const estPerBox=cv.estPerBox||0;
         const finalPerBox=cv.finalPerBox||0;
@@ -1946,7 +1946,7 @@ function exportCity(day,city){
     const c=state[day][city].drivers[name]._c||{};
     csv+=[name,city,state[day][city].date,day,c.actBoxes||'',
       c.estPay?c.estPay.toFixed(2):'',c.finalPerBox?c.finalPerBox.toFixed(2):'',
-      c.bonus||0,c.finalPay?c.finalPay.toFixed(2):'',
+      ((c.bonus||0)+(c.fixedBonus||0)).toFixed(2),c.finalPay?c.finalPay.toFixed(2):'',
       c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
   }
   dl(csv,`funky-food-pay-${city}-${day}-${state[day][city].date||'export'}.csv`);
@@ -1957,7 +1957,7 @@ function exportWeekly(){
     for(const name in state[day][city].drivers){
       const c=state[day][city].drivers[name]._c||{};
       csv+=[day,city,state[day][city].date,name,c.actBoxes||'',
-        c.finalPerBox?c.finalPerBox.toFixed(2):'',c.bonus||0,
+        c.finalPerBox?c.finalPerBox.toFixed(2):'',((c.bonus||0)+(c.fixedBonus||0)).toFixed(2),
         c.finalPay?c.finalPay.toFixed(2):'',
         c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
     }
@@ -2107,7 +2107,7 @@ function renderInvoice(){
       lineItems.push({
         date, qty: cv.actBoxes||d.stops,
         unitPrice: cv.finalPerBox||0,
-        additional: cv.bonus||0,
+        additional: (cv.bonus||0)+(cv.fixedBonus||0),
         total: cv.finalPay||0
       });
     });
