@@ -2349,11 +2349,10 @@ async function loadFuelCompEnabledFromFirebase(){
 function toggleFuelComp(){
   fuelCompEnabled = !fuelCompEnabled;
   saveFuelCompEnabledToFirebase();
-  // Re-render any views that show fuel comp numbers so the change is reflected immediately
-  renderFuel();
-  if(typeof renderWeekly === 'function') renderWeekly();
-  if(typeof renderInvoice === 'function') renderInvoice();
-  if(typeof renderPayPreview === 'function') renderPayPreview();
+  // Only re-render whichever tab is currently visible, so toggling doesn't
+  // yank the user to a different tab. Other tabs will pick up the new
+  // fuelCompEnabled value next time they're opened (it's read live, not cached).
+  buildMain();
 }
 
 function setDriverDetail(city, name, field, value){
