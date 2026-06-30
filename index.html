@@ -1606,7 +1606,7 @@ function renderWeekly(){
 
     // ── Fuel compensation per driver for this city ──
     const driverFuel = {};
-    if(fuelVehicleType[city]) {
+    if(fuelCompEnabled && fuelVehicleType[city]) {
       const driverKM = {};
       ALL_DAYS.forEach(day => {
         if(!DAY_CITIES[day].includes(city)) return;
@@ -1858,6 +1858,9 @@ const FUEL_RATES = {
   }
 };
 const REIMBURSE_RATE = 0.50;
+// Fuel compensation can be paused org-wide. Defaults to OFF; toggled via the
+// switch in the Fuel tab, persisted to Firebase so it stays off/on across sessions.
+let fuelCompEnabled = false;
 // Resolve the base price for a vehicle type in a given city.
 // Diesel is flat across cities; Petrol varies by city.
 function getFuelBase(vtype, city){
@@ -1915,7 +1918,22 @@ function renderFuel(){
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
       <div style="font-weight:500;font-size:14px">${city} — Fuel Rates Reference</div>
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">Reimbursement Rate: 50%</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
+          Fuel Compensation: <strong style="color:${fuelCompEnabled?'#4a7c59':'#c0392b'}">${fuelCompEnabled?'ON':'PAUSED'}</strong>
+        </span>
+        <button onclick="toggleFuelComp()" style="
+          background:${fuelCompEnabled?'#4a7c59':'#d0d0c8'};
+          border:none;border-radius:999px;width:42px;height:22px;position:relative;
+          cursor:pointer;padding:0;flex-shrink:0;transition:background 0.15s ease;
+        " title="${fuelCompEnabled?'Click to pause fuel compensation':'Click to enable fuel compensation'}">
+          <span style="
+            position:absolute;top:2px;left:${fuelCompEnabled?'22px':'2px'};
+            width:18px;height:18px;border-radius:50%;background:white;
+            transition:left 0.15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.25);
+          "></span>
+        </button>
+      </div>
     </div>
     <div style="overflow-x:auto">
     <table class="wi-table">
@@ -1929,6 +1947,11 @@ function renderFuel(){
     </table>
     </div>
   </div>
+
+  ${!fuelCompEnabled ? `
+  <div style="background:#fdf3f0;border:1px solid #f0c9bd;color:#9a4a35;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px">
+    ⏸ Fuel compensation is currently <strong>paused</strong>. Drivers will show $0 compensation below, and fuel comp will not appear on invoices, the weekly summary, or pay preview. Toggle the switch above to resume.
+  </div>` : ''}
 
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
@@ -1952,7 +1975,7 @@ function renderFuel(){
     const km = driverKM[name];
     const litres = (km / 100) * rates.economy;
     const exempt = isFuelExempt(name);
-    const comp = exempt ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
+    const comp = (!fuelCompEnabled || exempt) ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
     totalComp += comp;
 
     const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
@@ -1970,7 +1993,7 @@ function renderFuel(){
       <td style="text-align:right">${fmtMoney(base)}</td>
       <td style="text-align:right">${fmtMoney(rates.newPrice)}</td>
       <td style="text-align:right">${litres.toFixed(1)}</td>
-      <td style="text-align:right;color:#1b1c1e">${exempt?'—':fmtMoney(comp, 0)}</td>
+      <td style="text-align:right;color:#1b1c1e">${(!fuelCompEnabled||exempt)?'—':fmtMoney(comp, 0)}</td>
     </tr>`;
   }
 
@@ -2278,6 +2301,7 @@ function isFuelExempt(name){
 }
 
 function driverFuelComp(name, city){
+  if(!fuelCompEnabled) return 0;
   if(isFuelExempt(name)) return 0;
   if(!fuelVehicleType[city]) return 0;
   let km=0;
@@ -2290,6 +2314,46 @@ function driverFuelComp(name, city){
   const base=getFuelBase(vtype, city);
   const litres=(km/100)*rates.economy;
   return (rates.newPrice-base)*litres*REIMBURSE_RATE;
+}
+
+async function saveFuelCompEnabledToFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'fuelComp'), { enabled: fuelCompEnabled, updatedAt: new Date().toISOString() });
+      console.log('Fuel comp setting saved to Firebase!');
+    }
+    localStorage.setItem('funkyFuelCompEnabled', JSON.stringify(fuelCompEnabled));
+  } catch(e){ console.error('Could not save fuel comp setting:', e); }
+}
+
+async function loadFuelCompEnabledFromFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'fuelComp'));
+      if(snap.exists()){
+        fuelCompEnabled = !!snap.data().enabled;
+        console.log('Fuel comp setting loaded from Firebase:', fuelCompEnabled);
+        return;
+      }
+    }
+  } catch(e){ console.error('Firebase load error (fuelComp):', e); }
+  // Fallback to localStorage; if nothing saved anywhere, stays at default (false)
+  try {
+    const saved = localStorage.getItem('funkyFuelCompEnabled');
+    if(saved !== null){ fuelCompEnabled = JSON.parse(saved); }
+  } catch(e){}
+}
+
+function toggleFuelComp(){
+  fuelCompEnabled = !fuelCompEnabled;
+  saveFuelCompEnabledToFirebase();
+  // Re-render any views that show fuel comp numbers so the change is reflected immediately
+  renderFuel();
+  if(typeof renderWeekly === 'function') renderWeekly();
+  if(typeof renderInvoice === 'function') renderInvoice();
+  if(typeof renderPayPreview === 'function') renderPayPreview();
 }
 
 function setDriverDetail(city, name, field, value){
@@ -2741,6 +2805,7 @@ window._onFirebaseReady = async function(){
   // Auto-clean up any duplicate weeks (same label, multiple docs) — keeps only newest per week
   await dedupeArchiveOnce();
   loadDriverDetailsFromFirebase();
+  await loadFuelCompEnabledFromFirebase();
   // Then load session — but DON'T let it call loadArchiveFromFirebase again
   await autoLoadSession();
   // Refresh nav now that everything is loaded
