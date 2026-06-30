@@ -660,8 +660,11 @@ function startNewWeek(){
 }
 
 // ── Computes a city's TOTAL Net Pay (Weekly Summary bottom-row figure) ──────
-// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row:
-// sum of driver finalPay, plus food relief deduction, plus fuel comp (if enabled).
+// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row,
+// PLUS per-driver GST removal (same formula invoices use): drivers marked
+// GST Invalid in driverDetails have GST stripped from their total (÷11 removed)
+// since they're not legally able to charge it. Calculated per-driver (not
+// pooled city-wide) so the GST removal exactly matches what invoices show.
 // Used when saving a week, so the figure can be persisted to Firestore for
 // external tools (e.g. the weekly pay log Google Sheet) without duplicating
 // this math anywhere else.
@@ -687,7 +690,7 @@ function computeCityNetPay(city){
   if(!cityDrivers.length) return 0;
   const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay,0);
 
-  // Food relief deduction (city-wide), same formula as renderWeekly
+  // Food relief deduction (city-wide pool + rate), same formula as renderWeekly/invoices
   let cityFRDeduction = 0;
   ALL_DAYS.forEach(day=>{
     if(!DAY_CITIES[day].includes(city)) return;
@@ -701,12 +704,28 @@ function computeCityNetPay(city){
       if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
     }
   });
+  // City-wide FR rate, applied to each driver's own subtotal (same as invoices)
+  const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
 
-  // Fuel comp (city-wide), respects the on/off toggle automatically via driverFuelComp()
-  let totalFuelComp = 0;
-  cityDrivers.forEach(d=>{ totalFuelComp += driverFuelComp(d.name, city); });
+  // Sum per-driver: subtotal + driver's own FR share + driver's fuel comp,
+  // then strip GST if that driver is marked GST Invalid — exactly matching
+  // the per-invoice calculation, so Weekly Summary/Pay Preview/the Google
+  // Sheet always agree with what invoices actually show.
+  let total = 0;
+  cityDrivers.forEach(d=>{
+    const subtotal = d.finalPay;
+    const frDeduction = subtotal * frRate;
+    const fuelComp = driverFuelComp(d.name, city);
+    const netBeforeGST = subtotal + frDeduction + fuelComp;
 
-  return cityTotal + cityFRDeduction + totalFuelComp;
+    const det = (driverDetails[city] && driverDetails[city][d.name]) || {};
+    const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
+    const driverTotal = isGSTInvalid ? netBeforeGST * (10/11) : netBeforeGST;
+
+    total += driverTotal;
+  });
+
+  return total;
 }
 
 async function saveCurrentWeek(){
