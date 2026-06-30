@@ -293,6 +293,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBR1iV_Pv2xVFqFhc5DzkRyI2qev3rXimM",
@@ -306,19 +307,108 @@
     try {
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+      const auth = getAuth(app);
       window._db = db;
+      window._auth = auth;
       window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection };
       window._firebaseReady = true;
       console.log('Firebase connected! ☁️');
-      // Trigger Firebase-dependent loads now that it's ready
-      if(window._onFirebaseReady) window._onFirebaseReady();
+
+      // ── AUTH GATE ──────────────────────────────────────────────
+      const loginScreen = document.getElementById('loginScreen');
+      const appRoot = document.getElementById('appRoot');
+      const loginForm = document.getElementById('loginForm');
+      const loginError = document.getElementById('loginError');
+      const logoutBtn = document.getElementById('logoutBtn');
+
+      setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          loginScreen.style.display = 'none';
+          appRoot.style.display = '';
+          // Trigger Firebase-dependent loads now that user is signed in
+          if(window._onFirebaseReady) window._onFirebaseReady();
+        } else {
+          loginScreen.style.display = '';
+          appRoot.style.display = 'none';
+        }
+      });
+
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.style.display = 'none';
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in…';
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          loginError.textContent = 'Incorrect email or password.';
+          loginError.style.display = 'block';
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign in';
+        }
+      });
+
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => signOut(auth));
+      }
+      // ── END AUTH GATE ──────────────────────────────────────────
+
     } catch(e) {
       console.error('Firebase init error:', e);
       window._firebaseReady = false;
     }
   </script>
+  <style>
+    #loginScreen {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: var(--cream); font-family: 'Sora', sans-serif;
+    }
+    #loginScreen .login-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 40px 36px; width: 100%; max-width: 360px;
+    }
+    #loginScreen h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+    #loginScreen p.sub { font-size: 12px; color: var(--text-muted); margin-bottom: 22px; }
+    #loginScreen label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 6px; }
+    #loginScreen input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: 'Sora', sans-serif; font-size: 14px; margin-bottom: 16px; outline: none; background: white; }
+    #loginScreen input:focus { border-color: var(--olive-light); }
+    #loginScreen button[type="submit"] {
+      width: 100%; background: var(--olive); color: white; border: none; border-radius: 8px;
+      padding: 11px; font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    #loginScreen button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+    #loginScreen .login-error { color: #c0392b; font-size: 12px; margin: -8px 0 14px; display: none; }
+    #logoutBtn {
+      background: var(--cream); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 8px; font-family: 'Sora', sans-serif;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+  </style>
 </head>
 <body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Funky Food — Delivery Pay</h1>
+    <p class="sub">Sign in to access this dashboard.</p>
+    <form id="loginForm">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+      <div class="login-error" id="loginError">Incorrect email or password.</div>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none">
 
 <header>
   <div class="logo">
@@ -329,7 +419,10 @@
       
     </div>
   </div>
-  <div class="date-pill" id="todayDate"></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="date-pill" id="todayDate"></div>
+    <button id="logoutBtn">Sign out</button>
+  </div>
 </header>
 
 <div class="tabs-bar" id="tabsBar"></div>
@@ -1148,22 +1241,13 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
           <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
-          ${city==='Sydney' && ['Wednesday','Thursday','Friday','Saturday'].includes(day)
-            ? `<div class="field-group"><label>Gate Fee 🔒</label>
-                <div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">+$12.00 (gate fee)</div>
-                <input type="hidden" id="${key}_${name}_bonus" value="0">
-              </div>
-              <div class="field-group"><label>Bonus & Fines ($) ✎</label>
-                <input type="number" class="tag-input" id="${key}_${name}_sydextra" value="${c._sydExtra||0}" step="0.01" min="0" oninput="compute('${day}','${city}','${name}')">
-              </div>`
-            : `<div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
-                ${getFixedBonusLabel(day,city,name)
-                  ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
-                  : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
-                }
-                ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
-              </div>`
-          }
+          <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
+            ${getFixedBonusLabel(day,city,name)
+              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
+              : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
+            }
+            ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
+          </div>
         </div>
         <div class="results-strip">
           <div class="result-item"><div class="r-label">Est Pay</div><div class="r-val" id="${key}_${name}_estPay">${c.estPay?'$'+c.estPay.toFixed(2):'—'}</div></div>
@@ -1187,7 +1271,7 @@ function buildCitySummary(day,city){
   let totB=0,totE=0,totF=0, rows='';
   for(const name in drivers){
     const c=drivers[name]._c||{}, boxes=c.actBoxes||drivers[name].stops;
-    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=(c.bonus||0)+(c.fixedBonus||0);
+    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=c.bonus||0;
     totB+=boxes;totE+=ep;totF+=fp;
     const speed = c.speed!=null?Math.round(c.speed)+'%':'—';
     const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b' : 'color:#569556';
@@ -1263,12 +1347,6 @@ function compute(day,city,name){
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
   // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
   if(city==='Sydney') fixedBonus += 12;
-  // Rule 4: Sydney drivers / Wed–Sat → +extra bonus per driver (editable)
-  if(city==='Sydney' && ['Wednesday','Thursday','Friday','Saturday'].includes(day)){
-    const sydExtra = parseFloat(document.getElementById(`${key}_${name}_sydextra`)?.value)||0;
-    fixedBonus += sydExtra;
-    d._c._sydExtra = sydExtra;
-  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   const foodBoxes   = d._c.foodBoxes||0;
@@ -1416,7 +1494,7 @@ function renderWeekly(){
         const estHrs=d.depotStart&&d.depotEnd?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
         const actFirst=cv._actFirst||'—';
         const actLast=cv._actLast||'—';
-        const bonus=(cv.bonus||0)+(cv.fixedBonus||0);
+        const bonus=cv.bonus||0;
         const estPay=cv.estPay||0;
         const estPerBox=cv.estPerBox||0;
         const finalPerBox=cv.finalPerBox||0;
@@ -1946,7 +2024,7 @@ function exportCity(day,city){
     const c=state[day][city].drivers[name]._c||{};
     csv+=[name,city,state[day][city].date,day,c.actBoxes||'',
       c.estPay?c.estPay.toFixed(2):'',c.finalPerBox?c.finalPerBox.toFixed(2):'',
-      ((c.bonus||0)+(c.fixedBonus||0)).toFixed(2),c.finalPay?c.finalPay.toFixed(2):'',
+      c.bonus||0,c.finalPay?c.finalPay.toFixed(2):'',
       c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
   }
   dl(csv,`funky-food-pay-${city}-${day}-${state[day][city].date||'export'}.csv`);
@@ -1957,7 +2035,7 @@ function exportWeekly(){
     for(const name in state[day][city].drivers){
       const c=state[day][city].drivers[name]._c||{};
       csv+=[day,city,state[day][city].date,name,c.actBoxes||'',
-        c.finalPerBox?c.finalPerBox.toFixed(2):'',((c.bonus||0)+(c.fixedBonus||0)).toFixed(2),
+        c.finalPerBox?c.finalPerBox.toFixed(2):'',c.bonus||0,
         c.finalPay?c.finalPay.toFixed(2):'',
         c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
     }
@@ -2107,7 +2185,7 @@ function renderInvoice(){
       lineItems.push({
         date, qty: cv.actBoxes||d.stops,
         unitPrice: cv.finalPerBox||0,
-        additional: (cv.bonus||0)+(cv.fixedBonus||0),
+        additional: cv.bonus||0,
         total: cv.finalPay||0
       });
     });
@@ -2669,10 +2747,10 @@ window._onFirebaseReady = async function(){
   updateWeekNav();
 };
 
-// If Firebase was already ready before this ran (unlikely but safe)
-if(window._firebaseReady && window._db){
-  window._onFirebaseReady();
-}
+// Note: actual data loading is now triggered from onAuthStateChanged
+// once a user is confirmed signed in (see auth gate script in <head>).
 </script>
+
+</div><!-- /#appRoot -->
 </body>
 </html>
