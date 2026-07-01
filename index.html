@@ -660,11 +660,8 @@ function startNewWeek(){
 }
 
 // ── Computes a city's TOTAL Net Pay (Weekly Summary bottom-row figure) ──────
-// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row,
-// PLUS per-driver GST removal (same formula invoices use): drivers marked
-// GST Invalid in driverDetails have GST stripped from their total (÷11 removed)
-// since they're not legally able to charge it. Calculated per-driver (not
-// pooled city-wide) so the GST removal exactly matches what invoices show.
+// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row:
+// sum of driver finalPay, plus food relief deduction, plus fuel comp (if enabled).
 // Used when saving a week, so the figure can be persisted to Firestore for
 // external tools (e.g. the weekly pay log Google Sheet) without duplicating
 // this math anywhere else.
@@ -690,7 +687,7 @@ function computeCityNetPay(city){
   if(!cityDrivers.length) return 0;
   const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay,0);
 
-  // Food relief deduction (city-wide pool + rate), same formula as renderWeekly/invoices
+  // Food relief deduction (city-wide), same formula as renderWeekly
   let cityFRDeduction = 0;
   ALL_DAYS.forEach(day=>{
     if(!DAY_CITIES[day].includes(city)) return;
@@ -704,28 +701,12 @@ function computeCityNetPay(city){
       if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
     }
   });
-  // City-wide FR rate, applied to each driver's own subtotal (same as invoices)
-  const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
 
-  // Sum per-driver: subtotal + driver's own FR share + driver's fuel comp,
-  // then strip GST if that driver is marked GST Invalid — exactly matching
-  // the per-invoice calculation, so Weekly Summary/Pay Preview/the Google
-  // Sheet always agree with what invoices actually show.
-  let total = 0;
-  cityDrivers.forEach(d=>{
-    const subtotal = d.finalPay;
-    const frDeduction = subtotal * frRate;
-    const fuelComp = driverFuelComp(d.name, city);
-    const netBeforeGST = subtotal + frDeduction + fuelComp;
+  // Fuel comp (city-wide), respects the on/off toggle automatically via driverFuelComp()
+  let totalFuelComp = 0;
+  cityDrivers.forEach(d=>{ totalFuelComp += driverFuelComp(d.name, city); });
 
-    const det = (driverDetails[city] && driverDetails[city][d.name]) || {};
-    const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
-    const driverTotal = isGSTInvalid ? netBeforeGST * (10/11) : netBeforeGST;
-
-    total += driverTotal;
-  });
-
-  return total;
+  return cityTotal + cityFRDeduction + totalFuelComp;
 }
 
 async function saveCurrentWeek(){
@@ -1719,13 +1700,18 @@ function renderWeekly(){
         <thead><tr>
           <th>Driver</th><th>Days</th><th>Boxes</th>
           <th>Delivery Costs</th><th>${colHeader}</th>
-          <th>⛽ Fuel Comp</th><th>Net Pay</th>
+          <th>⛽ Fuel Comp</th><th>Net Pay</th><th>Actual Pay</th>
         </tr></thead>
         <tbody>`;
+    let grandActualPay = 0;
     cityDrivers.forEach(d => {
       const frDeduction = cityTotal > 0 ? d.finalPay * frRate : 0;
       const fuelComp = driverFuel[d.name]||0;
       const netPay = d.finalPay + frDeduction + fuelComp;
+      const det = (driverDetails[city]&&driverDetails[city][d.name])||{};
+      const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
+      const actualPay = isGSTInvalid ? netPay * (10/11) : netPay;
+      grandActualPay += actualPay;
       html += `<tr>
         <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${d.name}</td>
         <td>${d.days}</td>
@@ -1738,6 +1724,12 @@ function renderWeekly(){
           ${fuelComp>0?'+$'+Math.round(fuelComp):'—'}
         </td>
         <td style="color:#1b1c1e">${fmtMoney(netPay)}</td>
+        <td style="color:#1b1c1e;font-weight:600">
+          ${isGSTInvalid
+            ? `${fmtMoney(actualPay)} <span style="font-size:10px;font-family:'DM Mono',monospace;color:#c0392b;background:#fdecea;padding:2px 5px;border-radius:4px;margin-left:4px">excl. GST</span>`
+            : fmtMoney(actualPay)
+          }
+        </td>
       </tr>`;
     });
     // totals row
@@ -1750,6 +1742,7 @@ function renderWeekly(){
         <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
         <td>${totalFuelComp>0?'+$'+Math.round(totalFuelComp):'—'}</td>
         <td>${fmtMoney(grandNet)}</td>
+        <td style="font-weight:700">${fmtMoney(grandActualPay)}</td>
       </tr></tfoot>
     </tbody></table>
     </div>`;
