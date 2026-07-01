@@ -659,12 +659,12 @@ function startNewWeek(){
   alert('✅ All cleared! Ready for a new week. Your '+weekArchive.length+' saved week(s) are safe in the archive!');
 }
 
-// ── Computes a city's TOTAL Net Pay (Weekly Summary bottom-row figure) ──────
-// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row:
-// sum of driver finalPay, plus food relief deduction, plus fuel comp (if enabled).
-// Used when saving a week, so the figure can be persisted to Firestore for
-// external tools (e.g. the weekly pay log Google Sheet) without duplicating
-// this math anywhere else.
+// ── Computes a city's TOTAL Actual Pay ───────────────────────────────────────
+// Matches the "Actual Pay" column TOTAL in the Weekly Summary exactly:
+// per-driver subtotal + their FR share + their fuel comp, then GST stripped
+// (×10/11) for drivers marked GST Invalid in driverDetails. GST-valid drivers
+// keep their full net pay. Summed city-wide and saved to Firestore as
+// netPayByCity so the Google Sheet always reflects what's actually paid out.
 function computeCityNetPay(city){
   const driverW = {};
   ALL_DAYS.forEach(day=>{
@@ -674,20 +674,17 @@ function computeCityNetPay(city){
     const drivers = s.drivers||{};
     for(const name in drivers){
       const d = drivers[name], cv = d._c||{};
-      const actBoxes = cv.actBoxes||d.stops||0;
       const finalPay = cv.finalPay||0;
-      const wk = name;
-      if(!driverW[wk]) driverW[wk] = {name, boxes:0, finalPay:0};
-      driverW[wk].boxes += actBoxes;
-      driverW[wk].finalPay += finalPay;
+      if(!driverW[name]) driverW[name] = {name, finalPay:0};
+      driverW[name].finalPay += finalPay;
     }
   });
 
   const cityDrivers = Object.values(driverW);
   if(!cityDrivers.length) return 0;
-  const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay,0);
+  const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay, 0);
 
-  // Food relief deduction (city-wide), same formula as renderWeekly
+  // City-wide FR deduction pool and rate (same as renderWeekly + invoice logic)
   let cityFRDeduction = 0;
   ALL_DAYS.forEach(day=>{
     if(!DAY_CITIES[day].includes(city)) return;
@@ -701,12 +698,20 @@ function computeCityNetPay(city){
       if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
     }
   });
+  const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
 
-  // Fuel comp (city-wide), respects the on/off toggle automatically via driverFuelComp()
-  let totalFuelComp = 0;
-  cityDrivers.forEach(d=>{ totalFuelComp += driverFuelComp(d.name, city); });
+  // Sum per-driver Actual Pay: subtotal + FR share + fuel comp, GST stripped if invalid
+  let total = 0;
+  cityDrivers.forEach(d=>{
+    const frDeduction = d.finalPay * frRate;
+    const fuelComp = driverFuelComp(d.name, city);
+    const netPay = d.finalPay + frDeduction + fuelComp;
+    const det = (driverDetails[city]&&driverDetails[city][d.name])||{};
+    const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
+    total += isGSTInvalid ? netPay * (10/11) : netPay;
+  });
 
-  return cityTotal + cityFRDeduction + totalFuelComp;
+  return total;
 }
 
 async function saveCurrentWeek(){
