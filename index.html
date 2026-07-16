@@ -659,12 +659,12 @@ function startNewWeek(){
   alert('✅ All cleared! Ready for a new week. Your '+weekArchive.length+' saved week(s) are safe in the archive!');
 }
 
-// ── Computes a city's TOTAL Actual Pay ───────────────────────────────────────
-// Matches the "Actual Pay" column TOTAL in the Weekly Summary exactly:
-// per-driver subtotal + their FR share + their fuel comp, then GST stripped
-// (×10/11) for drivers marked GST Invalid in driverDetails. GST-valid drivers
-// keep their full net pay. Summed city-wide and saved to Firestore as
-// netPayByCity so the Google Sheet always reflects what's actually paid out.
+// ── Computes a city's TOTAL Net Pay (Weekly Summary bottom-row figure) ──────
+// Mirrors the same logic as renderWeekly()'s Driver Weekly Breakdown TOTAL row:
+// sum of driver finalPay, plus food relief deduction, plus fuel comp (if enabled).
+// Used when saving a week, so the figure can be persisted to Firestore for
+// external tools (e.g. the weekly pay log Google Sheet) without duplicating
+// this math anywhere else.
 function computeCityNetPay(city){
   const driverW = {};
   ALL_DAYS.forEach(day=>{
@@ -674,17 +674,20 @@ function computeCityNetPay(city){
     const drivers = s.drivers||{};
     for(const name in drivers){
       const d = drivers[name], cv = d._c||{};
+      const actBoxes = cv.actBoxes||d.stops||0;
       const finalPay = cv.finalPay||0;
-      if(!driverW[name]) driverW[name] = {name, finalPay:0};
-      driverW[name].finalPay += finalPay;
+      const wk = name;
+      if(!driverW[wk]) driverW[wk] = {name, boxes:0, finalPay:0};
+      driverW[wk].boxes += actBoxes;
+      driverW[wk].finalPay += finalPay;
     }
   });
 
   const cityDrivers = Object.values(driverW);
   if(!cityDrivers.length) return 0;
-  const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay, 0);
+  const cityTotal = cityDrivers.reduce((a,d)=>a+d.finalPay,0);
 
-  // City-wide FR deduction pool and rate (same as renderWeekly + invoice logic)
+  // Food relief deduction (city-wide), same formula as renderWeekly
   let cityFRDeduction = 0;
   ALL_DAYS.forEach(day=>{
     if(!DAY_CITIES[day].includes(city)) return;
@@ -698,20 +701,12 @@ function computeCityNetPay(city){
       if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
     }
   });
-  const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
 
-  // Sum per-driver Actual Pay: subtotal + FR share + fuel comp, GST stripped if invalid
-  let total = 0;
-  cityDrivers.forEach(d=>{
-    const frDeduction = d.finalPay * frRate;
-    const fuelComp = driverFuelComp(d.name, city);
-    const netPay = d.finalPay + frDeduction + fuelComp;
-    const det = (driverDetails[city]&&driverDetails[city][d.name])||{};
-    const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
-    total += isGSTInvalid ? netPay * (10/11) : netPay;
-  });
+  // Fuel comp (city-wide), respects the on/off toggle automatically via driverFuelComp()
+  let totalFuelComp = 0;
+  cityDrivers.forEach(d=>{ totalFuelComp += driverFuelComp(d.name, city); });
 
-  return total;
+  return cityTotal + cityFRDeduction + totalFuelComp;
 }
 
 async function saveCurrentWeek(){
@@ -962,7 +957,7 @@ function renderPayPreview(){
     let bonusLabel = '';
     if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
     else if(isBneFriFixed8(name)&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
-    else if(previewCity==='Sydney') bonusLabel='Gate fee';
+    else if(previewCity==='Sydney') bonusLabel = bonus ? 'Gate fee + extra' : 'Gate fee';
 
     html+=`<div class="preview-card">
       <div class="preview-header">
@@ -1304,12 +1299,15 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Est Time (hrs)</label><div class="val">${estHrs}</div></div>
           <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
-          <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒':' ✎'}</label>
-            ${getFixedBonusLabel(day,city,name)
-              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div>`
-              : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
+          <div class="field-group"><label>Bonus & Fines ($) ${city==='Sydney' ? '✎' : (getFixedBonusLabel(day,city,name)?'🔒':' ✎')}</label>
+            ${city==='Sydney'
+              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:11px;color:#569556;margin-bottom:4px">+$12.00 (gate fee, auto) 🔒</div>
+                 <input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')" placeholder="Extra bonus/fines">`
+              : (getFixedBonusLabel(day,city,name)
+                  ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div><input type="hidden" id="${key}_${name}_bonus" value="0">`
+                  : `<input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')">`
+                )
             }
-            ${getFixedBonusLabel(day,city,name) ? `<input type="hidden" id="${key}_${name}_bonus" value="0">` : ''}
           </div>
         </div>
         <div class="results-strip">
@@ -1331,11 +1329,11 @@ function buildDriverCards(day,city){
 // ── CITY SUMMARY ──────────────────────────────────────────────────────────────
 function buildCitySummary(day,city){
   const cfg=CITY_CFG[city], drivers=state[day][city].drivers;
-  let totB=0,totE=0,totF=0, rows='';
+  let totB=0,totE=0,totF=0,totBonus=0, rows='';
   for(const name in drivers){
     const c=drivers[name]._c||{}, boxes=c.actBoxes||drivers[name].stops;
-    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=c.bonus||0;
-    totB+=boxes;totE+=ep;totF+=fp;
+    const ep=c.estPay||0,fp=c.finalPay||0,fpb=c.finalPerBox||0,bonus=(c.bonus||0)+(c.fixedBonus||0);
+    totB+=boxes;totE+=ep;totF+=fp;totBonus+=bonus;
     const speed = c.speed!=null?Math.round(c.speed)+'%':'—';
     const speedStyle = c.speed!=null&&c.speed<90 ? 'color:#c0392b' : 'color:#569556';
     const sixPM = c.sixPM||'—';
@@ -1353,7 +1351,7 @@ function buildCitySummary(day,city){
     <table class="cs-table">
       <thead><tr><th>Driver</th><th>Boxes</th><th>Est Pay</th><th>Final/Box</th><th>Bonus/Fines</th><th>Final Pay</th><th>Speed</th><th>6PM</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td>TOTAL</td><td>${totB}</td><td>${fmtMoney(totE)}</td><td>—</td><td>—</td><td>${fmtMoney(totF)}</td><td>—</td><td>—</td></tr></tfoot>
+      <tfoot><tr><td>TOTAL</td><td>${totB}</td><td>${fmtMoney(totE)}</td><td>—</td><td>${totBonus?fmtMoney(totBonus):'—'}</td><td>${fmtMoney(totF)}</td><td>—</td><td>—</td></tr></tfoot>
     </table>
   </div>`;
 }
@@ -1557,7 +1555,7 @@ function renderWeekly(){
         const estHrs=d.depotStart&&d.depotEnd?((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2):'—';
         const actFirst=cv._actFirst||'—';
         const actLast=cv._actLast||'—';
-        const bonus=cv.bonus||0;
+        const bonus=(cv.bonus||0)+(cv.fixedBonus||0);
         const estPay=cv.estPay||0;
         const estPerBox=cv.estPerBox||0;
         const finalPerBox=cv.finalPerBox||0;
@@ -1705,18 +1703,13 @@ function renderWeekly(){
         <thead><tr>
           <th>Driver</th><th>Days</th><th>Boxes</th>
           <th>Delivery Costs</th><th>${colHeader}</th>
-          <th>⛽ Fuel Comp</th><th>Net Pay</th><th>Actual Pay</th>
+          <th>⛽ Fuel Comp</th><th>Net Pay</th>
         </tr></thead>
         <tbody>`;
-    let grandActualPay = 0;
     cityDrivers.forEach(d => {
       const frDeduction = cityTotal > 0 ? d.finalPay * frRate : 0;
       const fuelComp = driverFuel[d.name]||0;
       const netPay = d.finalPay + frDeduction + fuelComp;
-      const det = (driverDetails[city]&&driverDetails[city][d.name])||{};
-      const isGSTInvalid = (det.gst||'').toUpperCase().includes('INVALID');
-      const actualPay = isGSTInvalid ? netPay * (10/11) : netPay;
-      grandActualPay += actualPay;
       html += `<tr>
         <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${d.name}</td>
         <td>${d.days}</td>
@@ -1729,12 +1722,6 @@ function renderWeekly(){
           ${fuelComp>0?'+$'+Math.round(fuelComp):'—'}
         </td>
         <td style="color:#1b1c1e">${fmtMoney(netPay)}</td>
-        <td style="color:#1b1c1e;font-weight:600">
-          ${isGSTInvalid
-            ? `${fmtMoney(actualPay)} <span style="font-size:10px;font-family:'DM Mono',monospace;color:#c0392b;background:#fdecea;padding:2px 5px;border-radius:4px;margin-left:4px">excl. GST</span>`
-            : fmtMoney(actualPay)
-          }
-        </td>
       </tr>`;
     });
     // totals row
@@ -1747,7 +1734,6 @@ function renderWeekly(){
         <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
         <td>${totalFuelComp>0?'+$'+Math.round(totalFuelComp):'—'}</td>
         <td>${fmtMoney(grandNet)}</td>
-        <td style="font-weight:700">${fmtMoney(grandActualPay)}</td>
       </tr></tfoot>
     </tbody></table>
     </div>`;
@@ -2122,7 +2108,7 @@ function exportCity(day,city){
     const c=state[day][city].drivers[name]._c||{};
     csv+=[name,city,state[day][city].date,day,c.actBoxes||'',
       c.estPay?c.estPay.toFixed(2):'',c.finalPerBox?c.finalPerBox.toFixed(2):'',
-      c.bonus||0,c.finalPay?c.finalPay.toFixed(2):'',
+      ((c.bonus||0)+(c.fixedBonus||0)),c.finalPay?c.finalPay.toFixed(2):'',
       c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
   }
   dl(csv,`funky-food-pay-${city}-${day}-${state[day][city].date||'export'}.csv`);
@@ -2133,7 +2119,7 @@ function exportWeekly(){
     for(const name in state[day][city].drivers){
       const c=state[day][city].drivers[name]._c||{};
       csv+=[day,city,state[day][city].date,name,c.actBoxes||'',
-        c.finalPerBox?c.finalPerBox.toFixed(2):'',c.bonus||0,
+        c.finalPerBox?c.finalPerBox.toFixed(2):'',((c.bonus||0)+(c.fixedBonus||0)),
         c.finalPay?c.finalPay.toFixed(2):'',
         c.speed!=null?Math.round(c.speed)+'%':'',c.sixPM||''].join(',')+'\n';
     }
@@ -2283,7 +2269,7 @@ function renderInvoice(){
       lineItems.push({
         date, qty: cv.actBoxes||d.stops,
         unitPrice: cv.finalPerBox||0,
-        additional: cv.bonus||0,
+        additional: (cv.bonus||0)+(cv.fixedBonus||0),
         total: cv.finalPay||0
       });
     });
