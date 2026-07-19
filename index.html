@@ -439,6 +439,7 @@
 
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
     <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
+    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="migrateSydneyGateFee()" title="One-time fix: updates any saved weeks still recording the old $12 Sydney gate fee to $13">🔧 Fix Sydney Gate Fee</button>
   </div>
 </div>
 <main id="mainContent"></main>
@@ -796,6 +797,97 @@ async function saveCurrentWeek(){
     console.error('Save error:', e);
     alert('Could not save — please try again.');
   }
+}
+
+// ── ONE-TIME MIGRATION: Sydney gate fee $12 → $13 ────────────────────────────
+// Older saved weeks were archived before the gate fee changed from $12 to
+// $13. Archived snapshots are frozen at save-time, so the code change alone
+// doesn't touch them. This scans every saved week, finds Sydney driver
+// records still recorded at the old $12 fixedBonus, bumps them to $13,
+// corrects the derived pay figures, then re-saves the affected weeks.
+// Safe to run more than once — anything already at $13 is left untouched.
+async function migrateSydneyGateFee(){
+  if(!weekArchive || !weekArchive.length){
+    alert('No saved weeks found to check.');
+    return;
+  }
+  if(!confirm('This will scan all saved weeks and update any Sydney gate fee still recorded as $12 to $13, correcting the pay totals. This cannot be undone. Continue?')) return;
+
+  const touchedSnapshots = [];
+  let driverDaysFixed = 0;
+
+  weekArchive.forEach(snap=>{
+    let weekDelta = 0;
+    let weekTouched = false;
+
+    ALL_DAYS.forEach(day=>{
+      const s = snap.state && snap.state[day] && snap.state[day]['Sydney'];
+      if(!s || !s.drivers) return;
+
+      let dayDelta = 0;
+      for(const name in s.drivers){
+        const d = s.drivers[name];
+        const cv = d && d._c;
+        if(cv && cv.fixedBonus === 12){
+          cv.fixedBonus = 13;
+          cv.finalPay = (cv.finalPay||0) + 1;
+          const estHrs = mD(d.depotStart, d.depotEnd) || 0;
+          cv.finalHourly = estHrs>0 ? cv.finalPay/estHrs : 0;
+          dayDelta += 1;
+          driverDaysFixed += 1;
+          weekTouched = true;
+        }
+      }
+      if(dayDelta > 0){
+        if(!s._totals) s._totals = {boxes:0,est:0,final:0};
+        s._totals.final = (s._totals.final||0) + dayDelta;
+        weekDelta += dayDelta;
+      }
+    });
+
+    if(weekTouched){
+      if(snap.netPayByCity && typeof snap.netPayByCity.Sydney === 'number'){
+        snap.netPayByCity.Sydney += weekDelta;
+      }
+      touchedSnapshots.push(snap);
+    }
+  });
+
+  if(!touchedSnapshots.length){
+    alert('✅ Nothing to fix — all saved weeks already show the $13 gate fee.');
+    return;
+  }
+
+  // Persist to localStorage backup
+  try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+
+  // Persist only the touched weeks to Firebase
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      for(const snap of touchedSnapshots){
+        await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
+      }
+    }
+  } catch(e){
+    console.error('Migration Firebase save error:', e);
+    alert('Fixed the data locally, but saving to Firebase failed — please check your connection and run "Fix Sydney Gate Fee" again.');
+    return;
+  }
+
+  // If currently viewing one of the fixed archived weeks, refresh the display
+  if(viewingArchiveIndex >= 0){
+    const snap = weekArchive[viewingArchiveIndex];
+    ALL_DAYS.forEach(day=>{
+      DAY_CITIES[day].forEach(city=>{
+        if(snap.state[day] && snap.state[day][city])
+          state[day][city] = JSON.parse(JSON.stringify(snap.state[day][city]));
+      });
+    });
+    buildMain();
+  }
+
+  alert('✅ Fixed '+driverDaysFixed+' driver-day record(s) across '+touchedSnapshots.length+' saved week(s). Gate fee now shows $13.00.');
 }
 
 // Store current week state when navigating away
@@ -1301,7 +1393,7 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
           <div class="field-group"><label>Bonus & Fines ($) ${city==='Sydney' ? '✎' : (getFixedBonusLabel(day,city,name)?'🔒':' ✎')}</label>
             ${city==='Sydney'
-              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:11px;color:#569556;margin-bottom:4px">+$12.00 (gate fee, auto) 🔒</div>
+              ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:11px;color:#569556;margin-bottom:4px">+$13.00 (gate fee, auto) 🔒</div>
                  <input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')" placeholder="Extra bonus/fines">`
               : (getFixedBonusLabel(day,city,name)
                   ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:12px;color:#569556">${getFixedBonusLabel(day,city,name)}</div><input type="hidden" id="${key}_${name}_bonus" value="0">`
@@ -1372,7 +1464,7 @@ function getFixedBonusLabel(day, city, name){
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
-  if(city==='Sydney') labels.push('+$12.00 (gate fee)');
+  if(city==='Sydney') labels.push('+$13.00 (gate fee)');
   return labels.length ? labels.join(' · ') : null;
 }
 
@@ -1406,8 +1498,8 @@ function compute(day,city,name){
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
   // Rule 2: BNE_FRI_FIXED8 drivers / Brisbane / Friday → Final Per Box forced to $8.00
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
-  // Rule 3: All Sydney drivers / Every day → +$12 market gate fee
-  if(city==='Sydney') fixedBonus += 12;
+  // Rule 3: All Sydney drivers / Every day → +$13 market gate fee
+  if(city==='Sydney') fixedBonus += 13;
   // ─────────────────────────────────────────────────────────────────────────────
 
   const foodBoxes   = d._c.foodBoxes||0;
