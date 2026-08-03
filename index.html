@@ -2299,6 +2299,8 @@ function renderFuel(){
     const vtype = fuelVehicleType[city][name];
     const rates = effRates[vtype];
     const base = resolveFuelPrice(effRates, vtype, 'base', city);
+    const km = driverKM[name];
+    const litres = (km / 100) * rates.economy;
     const exempt = isFuelExempt(name);
     const comp = (!fuelCompEnabled || exempt) ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
     totalComp += comp;
