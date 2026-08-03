@@ -750,12 +750,17 @@ async function saveCurrentWeek(){
       Sydney:    computeCityNetPay('Sydney'),
       Melbourne: computeCityNetPay('Melbourne'),
     },
-    // Freeze the fuel "New Price" that was live at save time onto this week.
-    // Once a newer week is saved after this one, this week stops being the
-    // "most recent" and will always show this frozen price from now on.
+    // Freeze the fuel "New Price" and "Base Price" that were live at save
+    // time onto this week. Once a newer week is saved after this one, this
+    // week stops being the "most recent" and will always show these frozen
+    // prices from now on.
     fuelRates: {
       Diesel: FUEL_RATES.Diesel.newPrice,
       Petrol: FUEL_RATES.Petrol.newPrice,
+    },
+    fuelBaseRates: {
+      Diesel: FUEL_RATES.Diesel.base,
+      Petrol: JSON.parse(JSON.stringify(FUEL_RATES.Petrol.base)),
     },
   };
 
@@ -1782,7 +1787,7 @@ function renderWeekly(){
         if(isFuelExempt(name)){ driverFuel[name] = 0; continue; }
         const vtype = (fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
         const rates = effRatesWk[vtype];
-        const base = getFuelBase(vtype, city);
+        const base = resolveFuelPrice(effRatesWk, vtype, 'base', city);
         const km = driverKM[name];
         const litres = (km/100)*rates.economy;
         const comp = (rates.newPrice-base)*litres*REIMBURSE_RATE;
@@ -2024,71 +2029,106 @@ const REIMBURSE_RATE = 0.50;
 // Fuel compensation can be paused org-wide. Defaults to OFF; toggled via the
 // switch in the Fuel tab, persisted to Firebase so it stays off/on across sessions.
 let fuelCompEnabled = false;
-// Resolve the base price for a vehicle type in a given city.
-// Diesel is flat across cities; Petrol varies by city.
+
+// Resolve a base/newPrice value for a vehicle type + city from a given
+// FUEL_RATES-shaped rates object. Diesel's fields are flat; Petrol's base
+// varies by city (its newPrice is flat).
+function resolveFuelPrice(rates, vtype, field, city){
+  const v = rates[vtype][field];
+  return (typeof v === 'object') ? v[city] : v;
+}
+// Backwards-compatible helper — base price from the LIVE rates.
 function getFuelBase(vtype, city){
-  const b = FUEL_RATES[vtype].base;
-  return (typeof b === 'object') ? b[city] : b;
+  return resolveFuelPrice(FUEL_RATES, vtype, 'base', city);
 }
 
-// ── FUEL "NEW PRICE" — EDITABLE, WITH HISTORY FREEZE ─────────────────────────
-// FUEL_RATES.Diesel.newPrice / FUEL_RATES.Petrol.newPrice are now LIVE values
-// that can be edited from the Fuel tab. They apply to:
+// ── FUEL PRICES ("BASE" & "NEW") — EDITABLE, WITH HISTORY FREEZE ─────────────
+// Both FUEL_RATES.*.base and FUEL_RATES.*.newPrice are now LIVE values that
+// can be edited from the Fuel tab. They apply to:
 //   • the current (unsaved) week, and
 //   • the most recently saved/archived week (weekArchive[0])
-// so the price can still be tweaked right up until the next week is saved.
+// so prices can still be tweaked right up until the next week is saved.
 // Every time a week is saved (saveCurrentWeek), whatever these values are at
-// that moment gets frozen into that snapshot's `fuelRates` field. Once a week
-// is no longer the most recent (i.e. a newer week gets saved after it), it
-// shows its own frozen price forever, regardless of later live edits.
-// Older weeks saved before this feature existed have no frozen fuelRates —
-// those fall back to the original defaults below (same numbers they've
-// always shown), so nothing changes for them.
-const DEFAULT_FUEL_NEW_PRICE = { Diesel: 2.36, Petrol: 1.85 };
+// that moment gets frozen into that snapshot (`fuelRates` for New Price,
+// `fuelBaseRates` for Base Price). Once a week is no longer the most recent
+// (i.e. a newer week gets saved after it), it shows its own frozen prices
+// forever, regardless of later live edits. Weeks saved before this feature
+// existed have no frozen values — those fall back to the original defaults
+// below (same numbers they've always shown), so nothing changes for them.
+const DEFAULT_FUEL_NEW_PRICE  = { Diesel: 2.36, Petrol: 1.85 };
+const DEFAULT_FUEL_BASE_PRICE = { Diesel: 2.05, Petrol: { Sydney: 1.736, Melbourne: 1.734, Brisbane: 1.737 } };
 
-// Returns the FUEL_RATES-shaped object to actually use for the week currently
-// being viewed (live + editable for current/most-recent, frozen for older).
+// Returns the FUEL_RATES-shaped object to actually use for the week
+// currently being viewed (live + editable for current/most-recent, frozen
+// for older archived weeks).
 function getEffectiveFuelRates(){
   if(viewingArchiveIndex >= 1){
     const snap = weekArchive[viewingArchiveIndex];
-    const frozen = (snap && snap.fuelRates) ? snap.fuelRates : {};
-    const dPrice = typeof frozen.Diesel === 'number' ? frozen.Diesel : DEFAULT_FUEL_NEW_PRICE.Diesel;
-    const pPrice = typeof frozen.Petrol === 'number' ? frozen.Petrol : DEFAULT_FUEL_NEW_PRICE.Petrol;
+    const frozenNew  = (snap && snap.fuelRates)     ? snap.fuelRates     : {};
+    const frozenBase = (snap && snap.fuelBaseRates) ? snap.fuelBaseRates : {};
+    const dNew  = typeof frozenNew.Diesel === 'number' ? frozenNew.Diesel : DEFAULT_FUEL_NEW_PRICE.Diesel;
+    const pNew  = typeof frozenNew.Petrol === 'number' ? frozenNew.Petrol : DEFAULT_FUEL_NEW_PRICE.Petrol;
+    const dBase = typeof frozenBase.Diesel === 'number' ? frozenBase.Diesel : DEFAULT_FUEL_BASE_PRICE.Diesel;
+    const pBase = (frozenBase.Petrol && typeof frozenBase.Petrol === 'object') ? frozenBase.Petrol : DEFAULT_FUEL_BASE_PRICE.Petrol;
     return {
-      Diesel: { base: FUEL_RATES.Diesel.base, newPrice: dPrice, economy: FUEL_RATES.Diesel.economy },
-      Petrol: { base: FUEL_RATES.Petrol.base, newPrice: pPrice, economy: FUEL_RATES.Petrol.economy }
+      Diesel: { base: dBase, newPrice: dNew, economy: FUEL_RATES.Diesel.economy },
+      Petrol: { base: pBase, newPrice: pNew, economy: FUEL_RATES.Petrol.economy }
     };
   }
   // Current week (-1) or most recently saved week (0) — live, editable value
   return FUEL_RATES;
 }
 
-// True when the New Price fields should render as editable inputs
+// True when the Base/New Price fields should render as editable inputs
 // (current week, or the single most recently saved archived week).
 function isFuelPriceEditableView(){
   return viewingArchiveIndex <= 0;
 }
 
-function setFuelNewPrice(vtype, value){
+// city is only needed (and used) for Petrol base price, which varies by city.
+function setFuelPrice(vtype, field, value, city){
   const v = parseFloat(value);
   if(isNaN(v) || v < 0) return;
-  FUEL_RATES[vtype].newPrice = Math.round(v*100)/100;
+  const rounded = Math.round(v*100)/100;
+  if(field==='base' && vtype==='Petrol'){
+    if(typeof FUEL_RATES.Petrol.base !== 'object') FUEL_RATES.Petrol.base = {};
+    FUEL_RATES.Petrol.base[city] = rounded;
+  } else {
+    FUEL_RATES[vtype][field] = rounded;
+  }
   saveFuelPricingToFirebase();
   renderFuel();
   if(activeTab==='Weekly') renderWeekly();
 }
+function setFuelNewPrice(vtype, value){ setFuelPrice(vtype, 'newPrice', value); }
+function setFuelBasePrice(vtype, value, city){ setFuelPrice(vtype, 'base', value, city); }
 
-function resetFuelNewPrice(vtype){
-  if(!confirm('Reset '+vtype+' New Price back to the default ('+fmtMoney(DEFAULT_FUEL_NEW_PRICE[vtype])+')? You can enter a new value afterwards.')) return;
-  FUEL_RATES[vtype].newPrice = DEFAULT_FUEL_NEW_PRICE[vtype];
+function resetFuelPrice(vtype, field, city){
+  const label = field==='base' ? 'Base Price' : 'New Price';
+  if(!confirm('Reset '+vtype+' '+label+' back to the default? You can enter a new value afterwards.')) return;
+  if(field==='base' && vtype==='Petrol'){
+    FUEL_RATES.Petrol.base[city] = DEFAULT_FUEL_BASE_PRICE.Petrol[city];
+  } else if(field==='base'){
+    FUEL_RATES.Diesel.base = DEFAULT_FUEL_BASE_PRICE.Diesel;
+  } else {
+    FUEL_RATES[vtype].newPrice = DEFAULT_FUEL_NEW_PRICE[vtype];
+  }
   saveFuelPricingToFirebase();
   renderFuel();
   if(activeTab==='Weekly') renderWeekly();
 }
+function resetFuelNewPrice(vtype){ resetFuelPrice(vtype, 'newPrice'); }
+function resetFuelBasePrice(vtype, city){ resetFuelPrice(vtype, 'base', city); }
 
 async function saveFuelPricingToFirebase(){
   try {
-    const payload = { Diesel: FUEL_RATES.Diesel.newPrice, Petrol: FUEL_RATES.Petrol.newPrice, updatedAt: new Date().toISOString() };
+    const payload = {
+      Diesel: FUEL_RATES.Diesel.newPrice,
+      Petrol: FUEL_RATES.Petrol.newPrice,
+      baseDiesel: FUEL_RATES.Diesel.base,
+      basePetrol: FUEL_RATES.Petrol.base,
+      updatedAt: new Date().toISOString()
+    };
     if(window._firebaseReady && window._db){
       const { doc, setDoc } = window._firestoreFns;
       await setDoc(doc(window._db, 'settings', 'fuelPricing'), payload);
@@ -2098,25 +2138,22 @@ async function saveFuelPricingToFirebase(){
 }
 
 async function loadFuelPricingFromFirebase(){
+  const apply = (d) => {
+    if(typeof d.Diesel === 'number') FUEL_RATES.Diesel.newPrice = d.Diesel;
+    if(typeof d.Petrol === 'number') FUEL_RATES.Petrol.newPrice = d.Petrol;
+    if(typeof d.baseDiesel === 'number') FUEL_RATES.Diesel.base = d.baseDiesel;
+    if(d.basePetrol && typeof d.basePetrol === 'object') FUEL_RATES.Petrol.base = Object.assign({}, FUEL_RATES.Petrol.base, d.basePetrol);
+  };
   try {
     if(window._firebaseReady && window._db){
       const { doc, getDoc } = window._firestoreFns;
       const snap = await getDoc(doc(window._db, 'settings', 'fuelPricing'));
-      if(snap.exists()){
-        const d = snap.data();
-        if(typeof d.Diesel === 'number') FUEL_RATES.Diesel.newPrice = d.Diesel;
-        if(typeof d.Petrol === 'number') FUEL_RATES.Petrol.newPrice = d.Petrol;
-        return;
-      }
+      if(snap.exists()){ apply(snap.data()); return; }
     }
   } catch(e){ console.error('Firebase load error (fuelPricing):', e); }
   try {
     const saved = localStorage.getItem('funkyFuelPricing');
-    if(saved){
-      const d = JSON.parse(saved);
-      if(typeof d.Diesel === 'number') FUEL_RATES.Diesel.newPrice = d.Diesel;
-      if(typeof d.Petrol === 'number') FUEL_RATES.Petrol.newPrice = d.Petrol;
-    }
+    if(saved) apply(JSON.parse(saved));
   } catch(e){}
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2184,6 +2221,25 @@ function renderFuel(){
       </div>
     </td>`;
   };
+  // Base Price mirrors New Price: editable for current/most-recent week,
+  // frozen text for older weeks. Petrol's base varies by city, so it's
+  // reset/edited per the currently active city tab; Diesel's base is flat.
+  const basePriceCell = (vtype) => {
+    const baseVal = resolveFuelPrice(effRates, vtype, 'base', city);
+    if(!priceEditable){
+      return `<td>${fmtMoney(baseVal)}</td>`;
+    }
+    const inputId = `fuelBasePrice-${vtype}-${city}`;
+    return `<td>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="${inputId}" value="${baseVal}" step="0.01" min="0"
+          onchange="setFuelBasePrice('${vtype}', this.value, '${city}')"
+          style="width:90px;text-align:right;font-family:'DM Mono',monospace;font-size:13px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:white;color:var(--text)">
+        <button onclick="resetFuelBasePrice('${vtype}', '${city}')" title="Reset ${vtype} Base Price to default"
+          style="background:var(--cream-dark);border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">↺</button>
+      </div>
+    </td>`;
+  };
   let html = `
   <div class="weekly-day-block" style="margin-bottom:20px">
     <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
@@ -2205,15 +2261,15 @@ function renderFuel(){
         </button>
       </div>
     </div>
-    ${!priceEditable ? `<div style="padding:8px 16px 0;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">🔒 New Price is locked for this saved week — it's frozen at what it was when this week was saved.</div>` : `<div style="padding:8px 16px 0;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">✎ New Price is editable here — it stays live for the current week and the most recently saved week, and freezes once a newer week is saved.</div>`}
+    ${!priceEditable ? `<div style="padding:8px 16px 0;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">🔒 Base Price & New Price are locked for this saved week — frozen at what they were when this week was saved.</div>` : `<div style="padding:8px 16px 0;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace">✎ Base Price & New Price are editable here — they stay live for the current week and the most recently saved week, and freeze once a newer week is saved.</div>`}
     <div style="overflow-x:auto">
     <table class="wi-table">
       <thead><tr>
         <th>Vehicle Type</th><th>Economy (L/100km)</th><th>Base Price ($)</th><th style="text-align:right">New Price ($)</th>
       </tr></thead>
       <tbody>
-        <tr><td style="color:#1b1c1e">Diesel</td><td>13</td><td>${fmtMoney(effRates.Diesel.base)}</td>${newPriceCell('Diesel')}</tr>
-        <tr><td style="color:#1b1c1e">Petrol</td><td>16</td><td>${fmtMoney(getFuelBase('Petrol', city))}</td>${newPriceCell('Petrol')}</tr>
+        <tr><td style="color:#1b1c1e">Diesel</td><td>13</td>${basePriceCell('Diesel')}${newPriceCell('Diesel')}</tr>
+        <tr><td style="color:#1b1c1e">Petrol</td><td>16</td>${basePriceCell('Petrol')}${newPriceCell('Petrol')}</tr>
       </tbody>
     </table>
     </div>
@@ -2242,9 +2298,7 @@ function renderFuel(){
     if(!fuelVehicleType[city][name]) fuelVehicleType[city][name] = 'Diesel';
     const vtype = fuelVehicleType[city][name];
     const rates = effRates[vtype];
-    const base = getFuelBase(vtype, city);
-    const km = driverKM[name];
-    const litres = (km / 100) * rates.economy;
+    const base = resolveFuelPrice(effRates, vtype, 'base', city);
     const exempt = isFuelExempt(name);
     const comp = (!fuelCompEnabled || exempt) ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
     totalComp += comp;
@@ -2301,7 +2355,7 @@ function exportFuel(){
   for(const name in driverKM){
     const vtype = fuelVehicleType[city][name]||'Diesel';
     const rates = effRates[vtype];
-    const base = getFuelBase(vtype, city);
+    const base = resolveFuelPrice(effRates, vtype, 'base', city);
     const km = driverKM[name];
     const litres = (km/100)*rates.economy;
     const comp = (rates.newPrice-base)*litres*REIMBURSE_RATE;
@@ -2582,8 +2636,9 @@ function driverFuelComp(name, city){
     km += state[day][city].drivers[name]?.totalKm||0;
   });
   const vtype=(fuelVehicleType[city]&&fuelVehicleType[city][name])||'Diesel';
-  const rates=getEffectiveFuelRates()[vtype];
-  const base=getFuelBase(vtype, city);
+  const effRates=getEffectiveFuelRates();
+  const rates=effRates[vtype];
+  const base=resolveFuelPrice(effRates, vtype, 'base', city);
   const litres=(km/100)*rates.economy;
   return (rates.newPrice-base)*litres*REIMBURSE_RATE;
 }
