@@ -1420,7 +1420,7 @@ function buildActualsStatusBanner(day, city){
   if(filled === 0){
     return `<div class="status-banner error">
       <span style="font-size:16px">⚠️</span>
-      <span><strong>Actuals CSV uploaded but no data was pulled in.</strong> Act First/Last Stop are still blank for all ${names.length} driver(s) — the file's columns likely don't match, or the wrong file was uploaded. Re-upload the correct Actuals CSV above.</span>
+      <span><strong>Actuals CSV uploaded but no data was pulled in.</strong> Act First/Last Stop are still blank for all ${names.length} driver(s) — Re-upload the correct dispatched Solution Download CSV from Routific above.</span>
     </div>`;
   }
   if(filled < names.length){
