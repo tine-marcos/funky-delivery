@@ -115,6 +115,15 @@
 
   /* ── UPLOAD ── */
   .upload-pair { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+
+  /* ── STATUS BANNER (Actuals CSV verification) ── */
+  .status-banner {
+    display: flex; align-items: center; gap: 10px;
+    border-radius: 10px; padding: 12px 16px; margin-bottom: 18px;
+    font-size: 12.5px; line-height: 1.5;
+  }
+  .status-banner.success { background: var(--olive-pale); border: 1px solid var(--olive-light); color: #2f5c2f; }
+  .status-banner.error   { background: #ffe1e1; border: 1.5px solid #e6595c; color: #8a1f1f; }
   .upload-card {
     background: #f8f8f8; border-radius: 11px;
     border: 1px solid var(--border); padding: 20px 18px;
@@ -490,6 +499,7 @@
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
     <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
     <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="migrateSydneyGateFee()" title="One-time fix: updates any saved weeks still recording the old $12 Sydney gate fee to $13">🔧 Fix Sydney Gate Fee</button>
+    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="auditActualsCSVs()" title="Scan every saved week for day/city slots where an Estimated or Actuals CSV was uploaded but its data never pulled in">🔍 Audit CSV Uploads</button>
   </div>
 </div>
 <main id="mainContent"></main>
@@ -541,6 +551,10 @@ let driverDetails = {}; // driverDetails[city][name] = {company,phone,abn,addres
 let invoiceSettings = { submittedOn:'', invoiceStart:'040101', dueDate:'' };
 const fuelVehicleType = {}; // fuelVehicleType[city][name] = 'Diesel'|'Petrol'
 const frState = {}; // foodRelief[day][city] = { loaded, fileName, foodData: {driverName: count} }
+// Food Relief can be paused org-wide, just like Fuel Compensation. Defaults to
+// ON (this has always been active), toggled from the Food Relief tab,
+// persisted to Firebase so it stays on/off across sessions.
+let foodReliefEnabled = true;
 // ── NUMBER FORMATTER ─────────────────────────────────────────────────────────
 function fmtNum(v, decimals=2){
   return v.toLocaleString('en-AU', {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
@@ -740,18 +754,20 @@ function computeCityNetPay(city){
 
   // Food relief deduction (city-wide), same formula as renderWeekly
   let cityFRDeduction = 0;
-  ALL_DAYS.forEach(day=>{
-    if(!DAY_CITIES[day].includes(city)) return;
-    const frKey = `${day}-${city}`;
-    const fr = frState[frKey]||{loaded:false,foodData:{}};
-    const drivers = (state[day][city]&&state[day][city].drivers)||{};
-    for(const name in drivers){
-      const cv = drivers[name]._c||{};
-      const finalPerBox = cv.finalPerBox||0;
-      const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
-      if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
-    }
-  });
+  if(foodReliefEnabled){
+    ALL_DAYS.forEach(day=>{
+      if(!DAY_CITIES[day].includes(city)) return;
+      const frKey = `${day}-${city}`;
+      const fr = frState[frKey]||{loaded:false,foodData:{}};
+      const drivers = (state[day][city]&&state[day][city].drivers)||{};
+      for(const name in drivers){
+        const cv = drivers[name]._c||{};
+        const finalPerBox = cv.finalPerBox||0;
+        const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
+        if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
+      }
+    });
+  }
 
   // Fuel comp (city-wide), respects the on/off toggle automatically via driverFuelComp()
   let totalFuelComp = 0;
@@ -812,6 +828,10 @@ async function saveCurrentWeek(){
       Diesel: FUEL_RATES.Diesel.base,
       Petrol: JSON.parse(JSON.stringify(FUEL_RATES.Petrol.base)),
     },
+    // Freeze whether Fuel Compensation was ON/OFF at save time too — same
+    // rule as prices: live for current + most-recently-saved week, frozen
+    // for older weeks.
+    fuelCompEnabled: fuelCompEnabled,
   };
 
   // Save to Firebase + localStorage backup
@@ -950,6 +970,102 @@ async function migrateSydneyGateFee(){
   }
 
   alert('✅ Fixed '+driverDaysFixed+' driver-day record(s) across '+touchedSnapshots.length+' saved week(s). Gate fee now shows $13.00.');
+}
+
+// ── AUDIT: FIND DAY/CITY SLOTS WHERE ACTUALS CSV DIDN'T PARSE ───────────────
+// The app only keeps the parsed numbers, never the raw CSV file — so there's
+// nothing to "reprocess" server-side. What we CAN do is scan every saved
+// week (plus the current one) and flag any day/city where:
+//   • an Estimated CSV was marked as uploaded but zero drivers were parsed, or
+//   • an Actuals CSV was marked as uploaded but none of the drivers ended up
+//     with an Act First/Last Stop time
+// Both are silent-failure patterns — the upload card shows a checkmark and
+// filename either way — usually meaning the wrong file was uploaded, or its
+// column headers didn't match what the app expects. The person then knows
+// exactly which slots to go re-upload the correct file for.
+function scanCsvIssues(source, weekLabel, weekState){
+  const issues = [];
+  ALL_DAYS.forEach(day=>{
+    DAY_CITIES[day].forEach(city=>{
+      const s = weekState[day] && weekState[day][city];
+      if(!s) return;
+      const drivers = s.drivers || {};
+      const names = Object.keys(drivers);
+
+      if(s.estLoaded && !names.length){
+        issues.push({
+          type: 'Estimated', source, weekLabel, day, city,
+          fileName: s._estFile || '(unknown file)',
+          driverCount: 0
+        });
+      }
+
+      if(s.actLoaded && names.length){
+        const filled = names.filter(n => drivers[n]._c && drivers[n]._c._actFirst).length;
+        if(filled === 0){
+          issues.push({
+            type: 'Actuals', source, weekLabel, day, city,
+            fileName: s._actFile || '(unknown file)',
+            driverCount: names.length
+          });
+        }
+      }
+    });
+  });
+  return issues;
+}
+
+function auditActualsCSVs(){
+  let allIssues = [];
+  // Current (unsaved) week — only meaningful when we're actually looking at it
+  if(viewingArchiveIndex < 0){
+    allIssues = allIssues.concat(scanCsvIssues('Current week', 'Current week', state));
+  }
+  // Every saved/archived week
+  weekArchive.forEach(snap=>{
+    allIssues = allIssues.concat(scanCsvIssues('Archived', snap.label, snap.state));
+  });
+
+  if(!allIssues.length){
+    alert('✅ No issues found — every uploaded Estimated and Actuals CSV across all saved weeks pulled its data in correctly.');
+    return;
+  }
+
+  const rows = allIssues.map(i =>
+    `<tr>
+      <td><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;padding:3px 8px;border-radius:999px;background:${i.type==='Estimated'?'var(--olive-pale)':'#ffe1e1'};color:${i.type==='Estimated'?'var(--olive)':'#8a1f1f'}">${i.type}</span></td>
+      <td style="font-family:'Sora',sans-serif">${i.weekLabel}</td>
+      <td>${i.day}</td>
+      <td>${i.city}</td>
+      <td>${i.driverCount}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;word-break:break-all">${i.fileName}</td>
+    </tr>`
+  ).join('');
+
+  let modal = document.getElementById('actualsAuditModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'actualsAuditModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;max-width:880px;width:100%;max-height:85vh;overflow-y:auto;padding:26px 28px;font-family:'Sora',sans-serif">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h2 style="font-size:17px;font-weight:700;color:var(--text)">🔍 CSV Upload Audit</h2>
+        <button onclick="document.getElementById('actualsAuditModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">✕</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+        Found <strong>${allIssues.length}</strong> day/city slot(s) where a CSV was uploaded but its data never pulled into the driver fields — either an Estimated CSV with zero drivers parsed, or an Actuals CSV with no Act First/Last Stop filled in. Go to each one below and re-upload the correct file, then hit <strong>Save Week</strong> to lock the fix into that week's archive.
+      </p>
+      <div style="overflow-x:auto">
+        <table class="wi-table">
+          <thead><tr><th>Type</th><th>Week</th><th>Day</th><th>City</th><th>Drivers</th><th>File Uploaded</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 // Store current week state when navigating away
@@ -1269,6 +1385,56 @@ function buildMain() {
 }
 
 // ── CITY BODY ─────────────────────────────────────────────────────────────────
+// ── ESTIMATED STATUS BANNER ───────────────────────────────────────────────────
+// Same idea as the Actuals banner below. loadEst() can also silently "succeed"
+// with zero usable drivers if the file's columns don't match what's expected
+// (e.g. no "Driver Name"/"Stop Number"/"Start at" columns) — the upload card
+// still shows a checkmark and filename, but the driver list ends up empty.
+function buildEstimatedStatusBanner(day, city){
+  const s = state[day][city];
+  if(!s.estLoaded) return ''; // nothing uploaded yet — not an error state
+  const names = Object.keys(s.drivers||{});
+  if(!names.length){
+    return `<div class="status-banner error">
+      <span style="font-size:16px">⚠️</span>
+      <span><strong>Estimated CSV uploaded but no driver data was pulled in.</strong> Check the file has "Driver Name", "Stop Number", "Start at" and "Finish by" columns matching what's expected, or that the correct file was uploaded. Re-upload the correct Estimated CSV above.</span>
+    </div>`;
+  }
+  return `<div class="status-banner success">
+    <span style="font-size:16px">✅</span>
+    <span><strong>Estimated CSV verified</strong> — ${names.length} driver(s) loaded successfully.</span>
+  </div>`;
+}
+
+// ── ACTUALS STATUS BANNER ─────────────────────────────────────────────────────
+// Shown right under the upload cards, before the driver tables. Tells the
+// person at a glance whether an uploaded Actuals CSV actually carried its
+// data over into the driver fields — the same check the Audit tool runs,
+// but surfaced immediately per day/city instead of needing a manual scan.
+function buildActualsStatusBanner(day, city){
+  const s = state[day][city];
+  if(!s.actLoaded) return ''; // nothing uploaded yet — not an error state
+  const names = Object.keys(s.drivers||{});
+  if(!names.length) return '';
+  const filled = names.filter(n => s.drivers[n]._c && s.drivers[n]._c._actFirst).length;
+  if(filled === 0){
+    return `<div class="status-banner error">
+      <span style="font-size:16px">⚠️</span>
+      <span><strong>Actuals CSV uploaded but no data was pulled in.</strong> Act First/Last Stop are still blank for all ${names.length} driver(s) — the file's columns likely don't match, or the wrong file was uploaded. Re-upload the correct Actuals CSV above.</span>
+    </div>`;
+  }
+  if(filled < names.length){
+    return `<div class="status-banner error">
+      <span style="font-size:16px">⚠️</span>
+      <span><strong>Actuals CSV only partially pulled in.</strong> Act First/Last Stop are filled for ${filled} of ${names.length} driver(s) — the rest are blank, likely a driver name mismatch between the Estimated and Actuals CSVs.</span>
+    </div>`;
+  }
+  return `<div class="status-banner success">
+    <span style="font-size:16px">✅</span>
+    <span><strong>Actuals CSV verified</strong> — Act First/Last Stop pulled in correctly for all ${names.length} driver(s).</span>
+  </div>`;
+}
+
 function buildCityBody(day, city) {
   const s   = state[day][city];
   const key = `${day}-${city}`;
@@ -1292,6 +1458,8 @@ function buildCityBody(day, city) {
         <div class="file-name" id="nAct-${key}">${s.actLoaded?'✓ '+s._actFile:''}</div>
       </div>
     </div>
+    ${buildEstimatedStatusBanner(day,city)}
+    ${buildActualsStatusBanner(day,city)}
     <div class="config-row">
       <div class="config-card">
         <label>Delivery Date${day==='Tuesday'?' ✎':' (auto)'}</label>
@@ -1568,7 +1736,7 @@ function compute(day,city,name){
 
   const foodBoxes   = d._c.foodBoxes||0;
   const foodRate    = 5.50;
-  const foodDeduction = foodBoxes>0 ? (finalPerBox - foodRate) * foodBoxes * -1 : 0;
+  const foodDeduction = (foodReliefEnabled && foodBoxes>0) ? (finalPerBox - foodRate) * foodBoxes * -1 : 0;
   const finalPay    = finalPerBox*actBoxes+(bonus+fixedBonus)+(adj*finalPerBox)+foodDeduction;
   const finalHourly = estHrs>0?finalPay/estHrs:0;
   // Speed = (Est Last Stop - Est First Stop) / (Act Last Stop - Act First Stop)
@@ -1802,18 +1970,20 @@ function renderWeekly(){
     // ── Food Relief city-wide rate ──
     // Sum all food relief deductions across all days for this city
     let cityFRDeduction = 0;
-    ALL_DAYS.forEach(day => {
-      if (!DAY_CITIES[day].includes(city)) return;
-      const frKey = `${day}-${city}`;
-      const fr = frState[frKey]||{loaded:false,foodData:{}};
-      const drivers = state[day][city].drivers||{};
-      for (const name in drivers) {
-        const cv = drivers[name]._c||{};
-        const finalPerBox = cv.finalPerBox||0;
-        const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
-        if (foodBoxes > 0) cityFRDeduction += (finalPerBox - 5.50) * foodBoxes * -1;
-      }
-    });
+    if(foodReliefEnabled){
+      ALL_DAYS.forEach(day => {
+        if (!DAY_CITIES[day].includes(city)) return;
+        const frKey = `${day}-${city}`;
+        const fr = frState[frKey]||{loaded:false,foodData:{}};
+        const drivers = state[day][city].drivers||{};
+        for (const name in drivers) {
+          const cv = drivers[name]._c||{};
+          const finalPerBox = cv.finalPerBox||0;
+          const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
+          if (foodBoxes > 0) cityFRDeduction += (finalPerBox - 5.50) * foodBoxes * -1;
+        }
+      });
+    }
     const frRate = cityTotal > 0 ? cityFRDeduction / cityTotal : 0;
     const frPct = (frRate * 100).toFixed(2);
     const hasFR = cityFRDeduction !== 0;
@@ -1823,7 +1993,7 @@ function renderWeekly(){
 
     // ── Fuel compensation per driver for this city ──
     const driverFuel = {};
-    if(fuelCompEnabled && fuelVehicleType[city]) {
+    if(isFuelCompEffective() && fuelVehicleType[city]) {
       const driverKM = {};
       ALL_DAYS.forEach(day => {
         if(!DAY_CITIES[day].includes(city)) return;
@@ -1925,6 +2095,34 @@ function renderFoodRelief(){
   }).join('')+`</div>`;
   main.innerHTML=frSubHtml;
 
+  main.innerHTML += `
+  <div class="weekly-day-block" style="margin-bottom:20px">
+    <div class="weekly-day-header" style="background:var(--olive-pale);color:var(--olive);border-bottom:1px solid var(--border)">
+      <div style="font-weight:500;font-size:14px">🫙 Food Relief Deductions</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
+          Food Relief: <strong style="color:${foodReliefEnabled?'#4a7c59':'#c0392b'}">${foodReliefEnabled?'ON':'PAUSED'}</strong>
+        </span>
+        <button onclick="toggleFoodRelief()" style="
+          background:${foodReliefEnabled?'#4a7c59':'#d0d0c8'};
+          border:none;border-radius:999px;width:42px;height:22px;position:relative;
+          cursor:pointer;padding:0;flex-shrink:0;transition:background 0.15s ease;
+        " title="${foodReliefEnabled?'Click to pause food relief deductions':'Click to enable food relief deductions'}">
+          <span style="
+            position:absolute;top:2px;left:${foodReliefEnabled?'22px':'2px'};
+            width:18px;height:18px;border-radius:50%;background:white;
+            transition:left 0.15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.25);
+          "></span>
+        </button>
+      </div>
+    </div>
+  </div>
+  ${!foodReliefEnabled ? `
+  <div style="background:#fdf3f0;border:1px solid #f0c9bd;color:#9a4a35;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px">
+    ⏸ Food Relief deductions are currently <strong>paused</strong>. Drivers keep their normal per-box pay for food relief boxes, no team-wide donation pool is applied, and this won't appear on invoices, the weekly summary, or pay preview. Toggle the switch above to resume.
+  </div>` : ''}`;
+
+
   let html='', grandDeduction=0, grandFinalPay=0;
 
   ALL_DAYS.forEach(day=>{
@@ -1943,7 +2141,7 @@ function renderFoodRelief(){
         const finalPay=cv.finalPay||0;
         const finalPerBox=cv.finalPerBox||0;
         const foodRate=5.50;
-        const foodDeduction=foodBoxes>0?(finalPerBox-foodRate)*foodBoxes*-1:0;
+        const foodDeduction=(foodReliefEnabled && foodBoxes>0)?(finalPerBox-foodRate)*foodBoxes*-1:0;
         const pct=finalPay>0?(foodDeduction/finalPay)*100:0;
         dayFinal+=finalPay; dayDeduction+=foodDeduction;
         rows+=`<tr>
@@ -2135,6 +2333,20 @@ function isFuelPriceEditableView(){
   return viewingArchiveIndex <= 0;
 }
 
+// Fuel Compensation ON/OFF, same freeze pattern as the prices: live for the
+// current week and the most recently saved week, frozen at whatever it was
+// when a week is no longer the most recent. Weeks saved before this freeze
+// existed have no frozen flag — those fall back to the live toggle, same as
+// they've always shown (no behaviour change for them).
+function isFuelCompEffective(){
+  if(viewingArchiveIndex >= 1){
+    const snap = weekArchive[viewingArchiveIndex];
+    if(snap && typeof snap.fuelCompEnabled === 'boolean') return snap.fuelCompEnabled;
+    return fuelCompEnabled;
+  }
+  return fuelCompEnabled;
+}
+
 // city is only needed (and used) for Petrol base price, which varies by city.
 function setFuelPrice(vtype, field, value, city){
   const v = parseFloat(value);
@@ -2256,6 +2468,7 @@ function renderFuel(){
   // rates reference cards
   const effRates = getEffectiveFuelRates();
   const priceEditable = isFuelPriceEditableView();
+  const compEffective = isFuelCompEffective();
   const VTYPE_ICON = { Diesel: '⛽', Petrol: '🛢️' };
   const VTYPE_ECONOMY = { Diesel: 13, Petrol: 16 };
 
@@ -2307,15 +2520,16 @@ function renderFuel(){
       <div style="font-weight:500;font-size:14px">${city} — Fuel Rates Reference</div>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
-          Fuel Compensation: <strong style="color:${fuelCompEnabled?'#4a7c59':'#c0392b'}">${fuelCompEnabled?'ON':'PAUSED'}</strong>
+          Fuel Compensation: <strong style="color:${compEffective?'#4a7c59':'#c0392b'}">${compEffective?'ON':'PAUSED'}</strong>${!priceEditable?' 🔒':''}
         </span>
-        <button onclick="toggleFuelComp()" style="
-          background:${fuelCompEnabled?'#4a7c59':'#d0d0c8'};
+        <button onclick="${priceEditable?'toggleFuelComp()':''}" ${priceEditable?'':'disabled'} style="
+          background:${compEffective?'#4a7c59':'#d0d0c8'};
           border:none;border-radius:999px;width:42px;height:22px;position:relative;
-          cursor:pointer;padding:0;flex-shrink:0;transition:background 0.15s ease;
-        " title="${fuelCompEnabled?'Click to pause fuel compensation':'Click to enable fuel compensation'}">
+          cursor:${priceEditable?'pointer':'not-allowed'};padding:0;flex-shrink:0;transition:background 0.15s ease;
+          opacity:${priceEditable?'1':'0.6'};
+        " title="${priceEditable?(compEffective?'Click to pause fuel compensation':'Click to enable fuel compensation'):'Locked — frozen at what it was when this week was saved'}">
           <span style="
-            position:absolute;top:2px;left:${fuelCompEnabled?'22px':'2px'};
+            position:absolute;top:2px;left:${compEffective?'22px':'2px'};
             width:18px;height:18px;border-radius:50%;background:white;
             transition:left 0.15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.25);
           "></span>
@@ -2329,9 +2543,9 @@ function renderFuel(){
     </div>
   </div>
 
-  ${!fuelCompEnabled ? `
+  ${!compEffective ? `
   <div style="background:#fdf3f0;border:1px solid #f0c9bd;color:#9a4a35;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px">
-    ⏸ Fuel compensation is currently <strong>paused</strong>. Drivers will show $0 compensation below, and fuel comp will not appear on invoices, the weekly summary, or pay preview. Toggle the switch above to resume.
+    ⏸ Fuel compensation ${priceEditable?'is currently':'was'} <strong>paused</strong>${priceEditable?'':' for this saved week'}. Drivers will show $0 compensation below, and fuel comp will not appear on invoices, the weekly summary, or pay preview.${priceEditable?' Toggle the switch above to resume.':''}
   </div>` : ''}
 
   <div class="weekly-day-block" style="margin-bottom:20px">
@@ -2356,7 +2570,7 @@ function renderFuel(){
     const km = driverKM[name];
     const litres = (km / 100) * rates.economy;
     const exempt = isFuelExempt(name);
-    const comp = (!fuelCompEnabled || exempt) ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
+    const comp = (!compEffective || exempt) ? 0 : (rates.newPrice - base) * litres * REIMBURSE_RATE;
     totalComp += comp;
 
     const selId = `fuel-${city}-${name}`.replace(/\s+/g,'-');
@@ -2374,7 +2588,7 @@ function renderFuel(){
       <td style="text-align:right">${fmtMoney(base)}</td>
       <td style="text-align:right">${fmtMoney(rates.newPrice)}</td>
       <td style="text-align:right">${litres.toFixed(1)}</td>
-      <td style="text-align:right;color:#1b1c1e">${(!fuelCompEnabled||exempt)?'—':fmtMoney(comp, 0)}</td>
+      <td style="text-align:right;color:#1b1c1e">${(!compEffective||exempt)?'—':fmtMoney(comp, 0)}</td>
     </tr>`;
   }
 
@@ -2608,17 +2822,19 @@ function renderInvoice(){
       },0);
     },0);
     let cityFRDed = 0;
-    ALL_DAYS.forEach(day=>{
-      if(!DAY_CITIES[day].includes(city)) return;
-      const fr=frState[day+'-'+city]||{loaded:false,foodData:{}};
-      const drivers=state[day][city].drivers;
-      for(const n2 in drivers){
-        const cv=drivers[n2]._c||{};
-        const fpb=cv.finalPerBox||0;
-        const fb=fr.loaded?(fr.foodData[n2]||0):(cv.foodBoxes||0);
-        if(fb>0) cityFRDed+=(fpb-5.50)*fb*-1;
-      }
-    });
+    if(foodReliefEnabled){
+      ALL_DAYS.forEach(day=>{
+        if(!DAY_CITIES[day].includes(city)) return;
+        const fr=frState[day+'-'+city]||{loaded:false,foodData:{}};
+        const drivers=state[day][city].drivers;
+        for(const n2 in drivers){
+          const cv=drivers[n2]._c||{};
+          const fpb=cv.finalPerBox||0;
+          const fb=fr.loaded?(fr.foodData[n2]||0):(cv.foodBoxes||0);
+          if(fb>0) cityFRDed+=(fpb-5.50)*fb*-1;
+        }
+      });
+    }
     const frRate = cityTotalPay>0?cityFRDed/cityTotalPay:0;
     frDeduction = subtotal * frRate;
     const totalDue = subtotal + fuelComp + frDeduction;
@@ -2683,7 +2899,7 @@ function isFuelExempt(name){
 }
 
 function driverFuelComp(name, city){
-  if(!fuelCompEnabled) return 0;
+  if(!isFuelCompEffective()) return 0;
   if(isFuelExempt(name)) return 0;
   if(!fuelVehicleType[city]) return 0;
   let km=0;
@@ -2735,6 +2951,50 @@ function toggleFuelComp(){
   // Only re-render whichever tab is currently visible, so toggling doesn't
   // yank the user to a different tab. Other tabs will pick up the new
   // fuelCompEnabled value next time they're opened (it's read live, not cached).
+  buildMain();
+}
+
+// ── FOOD RELIEF ON/OFF ────────────────────────────────────────────────────────
+// Mirrors the Fuel Compensation toggle. When paused, food relief boxes are
+// paid at the driver's normal per-box rate (no $5.50 discount) and no
+// team-wide donation pool deduction is applied anywhere — Food Relief tab,
+// Weekly Summary, Invoices, Pay Preview, and the saved netPayByCity totals.
+async function saveFoodReliefEnabledToFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'foodRelief'), { enabled: foodReliefEnabled, updatedAt: new Date().toISOString() });
+      console.log('Food relief setting saved to Firebase!');
+    }
+    localStorage.setItem('funkyFoodReliefEnabled', JSON.stringify(foodReliefEnabled));
+  } catch(e){ console.error('Could not save food relief setting:', e); }
+}
+
+async function loadFoodReliefEnabledFromFirebase(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'foodRelief'));
+      if(snap.exists()){
+        foodReliefEnabled = !!snap.data().enabled;
+        console.log('Food relief setting loaded from Firebase:', foodReliefEnabled);
+        return;
+      }
+    }
+  } catch(e){ console.error('Firebase load error (foodRelief):', e); }
+  // Fallback to localStorage; if nothing saved anywhere, stays at default (true)
+  try {
+    const saved = localStorage.getItem('funkyFoodReliefEnabled');
+    if(saved !== null){ foodReliefEnabled = JSON.parse(saved); }
+  } catch(e){}
+}
+
+function toggleFoodRelief(){
+  foodReliefEnabled = !foodReliefEnabled;
+  saveFoodReliefEnabledToFirebase();
+  // Recompute every loaded day/city so finalPay/foodDeduction (which are
+  // baked in by compute()) reflect the new toggle state immediately.
+  ALL_DAYS.forEach(day=>{ DAY_CITIES[day].forEach(city=>{ if(state[day][city].estLoaded) recomputeAll(day,city); }); });
   buildMain();
 }
 
@@ -2845,7 +3105,7 @@ function generateInvoicePDF(name, city, invNum){
     for(const n2 in state[day][city].drivers){
       const cv=state[day][city].drivers[n2]._c||{};
       const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);
-      if(fb>0) cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;
+      if(foodReliefEnabled && fb>0) cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;
     }
   });
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
@@ -3037,7 +3297,7 @@ function buildInvoiceHTML(name,city,invNum){
   const allDriverNames=new Set();ALL_DAYS.forEach(day=>{if(DAY_CITIES[day].includes(city))Object.keys(state[day][city].drivers).forEach(n=>allDriverNames.add(n));});
   let cityTotalPay=0,cityFRDed=0;
   allDriverNames.forEach(n2=>{ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;cityTotalPay+=(state[day][city].drivers[n2]?._c?.finalPay||0);});});
-  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;}});
+  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(foodReliefEnabled&&fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;}});
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
   const frDeduction=subtotal*frRate;
   const isGSTInvalid=(det.gst||'').toUpperCase().includes('INVALID');
@@ -3189,6 +3449,7 @@ window._onFirebaseReady = async function(){
   loadDriverDetailsFromFirebase();
   await loadFuelCompEnabledFromFirebase();
   await loadFuelPricingFromFirebase();
+  await loadFoodReliefEnabledFromFirebase();
   // Then load session — but DON'T let it call loadArchiveFromFirebase again
   await autoLoadSession();
   // Refresh nav now that everything is loaded
