@@ -211,7 +211,7 @@
   .weekly-day-block { background: var(--surface); border-radius: var(--radius); box-shadow: none; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border); }
   .weekly-day-header { background: var(--olive-pale); color: #1b1c1e; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
   .weekly-day-header h3 { font-size: 14px; font-weight: 500; }
-  .weekly-day-header .day-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: #1b1c1e; }
+  .weekly-day-header .day-meta { font-family: 'DM Mono', monospace; font-size: 13.75px; font-weight: 400; color: #1b1c1e; }
   .weekly-city-label { padding: 7px 20px; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
   .weekly-city-label.brisbane  { background: var(--olive-pale); color: #1b1c1e; }
   .weekly-city-label.melbourne { background: var(--olive-pale); color: #1b1c1e; }
@@ -274,11 +274,48 @@
   .frc-status-note.locked { background: #fdf3f0; color: #9a4a35; }
   .frc-status-note.editable { background: var(--olive-pale); color: var(--olive); }
 
-  .weekly-grand { background: var(--olive); color: white; border-radius: var(--radius); padding: 22px 28px; margin-bottom: 22px; }
-  .weekly-grand h3 { font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 16px; }
-  .grand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 16px; }
-  .grand-item .grand-label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.6; margin-bottom: 4px; }
-  .grand-item .grand-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+  .weekly-grand { background: linear-gradient(135deg, var(--olive), #3d5c3d); color: white; border-radius: var(--radius); padding: 24px 28px; margin-bottom: 22px; box-shadow: 0 8px 24px rgba(30,58,47,0.18); }
+  .weekly-grand h3 { font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; opacity: 0.65; margin-bottom: 16px; }
+  .grand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 14px; }
+  .grand-item {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .grand-item:hover { background: rgba(255,255,255,0.14); transform: translateY(-2px); }
+  .grand-item .grand-icon { font-size: 20px; flex-shrink: 0; opacity: 0.9; }
+  .grand-item .grand-label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.7px; opacity: 0.65; margin-bottom: 4px; }
+  .grand-item .grand-val { font-family: 'DM Mono', monospace; font-size: 21px; font-weight: 500; }
+
+  /* ── $/BOX TREND CHART ── */
+  .trend-card {
+    background: linear-gradient(135deg, #ffffff, #f8f6ef); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px 26px 18px; margin-bottom: 22px;
+  }
+  .trend-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; flex-wrap: wrap; gap: 8px; }
+  .trend-card-title { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 15px; color: var(--text); }
+  .trend-card-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
+  .trend-chart-outer { position: relative; }
+  .trend-chart-bars {
+    display: flex; align-items: flex-end; justify-content: center; gap: 10px; height: 190px; padding: 0 4px 4px; overflow-x: auto;
+    /* Light horizontal gridlines instead of a single average line — purely
+       a reading aid so bar heights are easier to compare at a glance. */
+    background-image: repeating-linear-gradient(to top, rgba(27,28,30,0.07) 0, rgba(27,28,30,0.07) 1px, transparent 1px, transparent 24px);
+    background-position: left bottom;
+  }
+  .trend-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 100px; flex: 0 0 auto; height: 100%; }
+  .trend-bar-value { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 6px; white-space: nowrap; }
+  .trend-bar-track { width: 100%; max-width: 52px; height: 100%; display: flex; align-items: flex-end; }
+  .trend-bar-fill {
+    width: 100%; border-radius: 7px 7px 3px 3px;
+    background: linear-gradient(180deg, #e8935c, #c96f3a);
+    transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; min-height: 4px;
+    transform-origin: bottom center;
+  }
+  .trend-bar-col:hover .trend-bar-fill { opacity: 0.9; transform: scaleX(1.1) scaleY(1.01); box-shadow: 0 4px 12px rgba(201,111,58,0.35); }
+  .trend-bar-col.is-current .trend-bar-fill { background: linear-gradient(180deg, #f3cf6b, #dba930); }
+  .trend-bar-col.is-current:hover .trend-bar-fill { box-shadow: 0 4px 12px rgba(219,169,48,0.4); }
+  .trend-bar-label { font-family: 'DM Mono', monospace; font-size: 9.5px; color: var(--text-muted); margin-top: 8px; text-align: center; line-height: 1.3; white-space: nowrap; }
 
   /* ── CITY SUB-TABS ── */
   .city-subtabs { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -498,8 +535,6 @@
 
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
     <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
-    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="migrateSydneyGateFee()" title="One-time fix: updates any saved weeks still recording the old $12 Sydney gate fee to $13">🔧 Fix Sydney Gate Fee</button>
-    <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="auditActualsCSVs()" title="Scan every saved week for day/city slots where an Estimated or Actuals CSV was uploaded but its data never pulled in">🔍 Audit CSV Uploads</button>
   </div>
 </div>
 <main id="mainContent"></main>
@@ -730,6 +765,24 @@ function startNewWeek(){
 // Used when saving a week, so the figure can be persisted to Firestore for
 // external tools (e.g. the weekly pay log Google Sheet) without duplicating
 // this math anywhere else.
+// Sums boxes + driver pay for a given city across a given week's state —
+// works on the live `state`, or on any archived snapshot's `snap.state`, so
+// it can be reused both for the current-week totals and the 8-week trend.
+function computeCityBoxAndPay(weekState, city){
+  let boxes = 0, pay = 0;
+  ALL_DAYS.forEach(day=>{
+    if(!DAY_CITIES[day].includes(city)) return;
+    const s = weekState[day] && weekState[day][city];
+    if(!s || !s.drivers) return;
+    for(const name in s.drivers){
+      const d = s.drivers[name], cv = d._c||{};
+      boxes += cv.actBoxes || d.stops || 0;
+      pay   += cv.finalPay || 0;
+    }
+  });
+  return { boxes, pay, avg: boxes>0 ? pay/boxes : 0 };
+}
+
 function computeCityNetPay(city){
   const driverW = {};
   ALL_DAYS.forEach(day=>{
@@ -881,192 +934,6 @@ async function saveCurrentWeek(){
   }
 }
 
-// ── ONE-TIME MIGRATION: Sydney gate fee $12 → $13 ────────────────────────────
-// Older saved weeks were archived before the gate fee changed from $12 to
-// $13. Archived snapshots are frozen at save-time, so the code change alone
-// doesn't touch them. This scans every saved week, finds Sydney driver
-// records still recorded at the old $12 fixedBonus, bumps them to $13,
-// corrects the derived pay figures, then re-saves the affected weeks.
-// Safe to run more than once — anything already at $13 is left untouched.
-async function migrateSydneyGateFee(){
-  if(!weekArchive || !weekArchive.length){
-    alert('No saved weeks found to check.');
-    return;
-  }
-  if(!confirm('This will scan all saved weeks and update any Sydney gate fee still recorded as $12 to $13, correcting the pay totals. This cannot be undone. Continue?')) return;
-
-  const touchedSnapshots = [];
-  let driverDaysFixed = 0;
-
-  weekArchive.forEach(snap=>{
-    let weekDelta = 0;
-    let weekTouched = false;
-
-    ALL_DAYS.forEach(day=>{
-      const s = snap.state && snap.state[day] && snap.state[day]['Sydney'];
-      if(!s || !s.drivers) return;
-
-      let dayDelta = 0;
-      for(const name in s.drivers){
-        const d = s.drivers[name];
-        const cv = d && d._c;
-        if(cv && cv.fixedBonus === 12){
-          cv.fixedBonus = 13;
-          cv.finalPay = (cv.finalPay||0) + 1;
-          const estHrs = mD(d.depotStart, d.depotEnd) || 0;
-          cv.finalHourly = estHrs>0 ? cv.finalPay/estHrs : 0;
-          dayDelta += 1;
-          driverDaysFixed += 1;
-          weekTouched = true;
-        }
-      }
-      if(dayDelta > 0){
-        if(!s._totals) s._totals = {boxes:0,est:0,final:0};
-        s._totals.final = (s._totals.final||0) + dayDelta;
-        weekDelta += dayDelta;
-      }
-    });
-
-    if(weekTouched){
-      if(snap.netPayByCity && typeof snap.netPayByCity.Sydney === 'number'){
-        snap.netPayByCity.Sydney += weekDelta;
-      }
-      touchedSnapshots.push(snap);
-    }
-  });
-
-  if(!touchedSnapshots.length){
-    alert('✅ Nothing to fix — all saved weeks already show the $13 gate fee.');
-    return;
-  }
-
-  // Persist to localStorage backup
-  try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
-
-  // Persist only the touched weeks to Firebase
-  try {
-    if(window._firebaseReady && window._db){
-      const { doc, setDoc } = window._firestoreFns;
-      for(const snap of touchedSnapshots){
-        await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
-      }
-    }
-  } catch(e){
-    console.error('Migration Firebase save error:', e);
-    alert('Fixed the data locally, but saving to Firebase failed — please check your connection and run "Fix Sydney Gate Fee" again.');
-    return;
-  }
-
-  // If currently viewing one of the fixed archived weeks, refresh the display
-  if(viewingArchiveIndex >= 0){
-    const snap = weekArchive[viewingArchiveIndex];
-    ALL_DAYS.forEach(day=>{
-      DAY_CITIES[day].forEach(city=>{
-        if(snap.state[day] && snap.state[day][city])
-          state[day][city] = JSON.parse(JSON.stringify(snap.state[day][city]));
-      });
-    });
-    buildMain();
-  }
-
-  alert('✅ Fixed '+driverDaysFixed+' driver-day record(s) across '+touchedSnapshots.length+' saved week(s). Gate fee now shows $13.00.');
-}
-
-// ── AUDIT: FIND DAY/CITY SLOTS WHERE ACTUALS CSV DIDN'T PARSE ───────────────
-// The app only keeps the parsed numbers, never the raw CSV file — so there's
-// nothing to "reprocess" server-side. What we CAN do is scan every saved
-// week (plus the current one) and flag any day/city where:
-//   • an Estimated CSV was marked as uploaded but zero drivers were parsed, or
-//   • an Actuals CSV was marked as uploaded but none of the drivers ended up
-//     with an Act First/Last Stop time
-// Both are silent-failure patterns — the upload card shows a checkmark and
-// filename either way — usually meaning the wrong file was uploaded, or its
-// column headers didn't match what the app expects. The person then knows
-// exactly which slots to go re-upload the correct file for.
-function scanCsvIssues(source, weekLabel, weekState){
-  const issues = [];
-  ALL_DAYS.forEach(day=>{
-    DAY_CITIES[day].forEach(city=>{
-      const s = weekState[day] && weekState[day][city];
-      if(!s) return;
-      const drivers = s.drivers || {};
-      const names = Object.keys(drivers);
-
-      if(s.estLoaded && !names.length){
-        issues.push({
-          type: 'Estimated', source, weekLabel, day, city,
-          fileName: s._estFile || '(unknown file)',
-          driverCount: 0
-        });
-      }
-
-      if(s.actLoaded && names.length){
-        const filled = names.filter(n => drivers[n]._c && drivers[n]._c._actFirst).length;
-        if(filled === 0){
-          issues.push({
-            type: 'Actuals', source, weekLabel, day, city,
-            fileName: s._actFile || '(unknown file)',
-            driverCount: names.length
-          });
-        }
-      }
-    });
-  });
-  return issues;
-}
-
-function auditActualsCSVs(){
-  let allIssues = [];
-  // Current (unsaved) week — only meaningful when we're actually looking at it
-  if(viewingArchiveIndex < 0){
-    allIssues = allIssues.concat(scanCsvIssues('Current week', 'Current week', state));
-  }
-  // Every saved/archived week
-  weekArchive.forEach(snap=>{
-    allIssues = allIssues.concat(scanCsvIssues('Archived', snap.label, snap.state));
-  });
-
-  if(!allIssues.length){
-    alert('✅ No issues found — every uploaded Estimated and Actuals CSV across all saved weeks pulled its data in correctly.');
-    return;
-  }
-
-  const rows = allIssues.map(i =>
-    `<tr>
-      <td><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;padding:3px 8px;border-radius:999px;background:${i.type==='Estimated'?'var(--olive-pale)':'#ffe1e1'};color:${i.type==='Estimated'?'var(--olive)':'#8a1f1f'}">${i.type}</span></td>
-      <td style="font-family:'Sora',sans-serif">${i.weekLabel}</td>
-      <td>${i.day}</td>
-      <td>${i.city}</td>
-      <td>${i.driverCount}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:11px;word-break:break-all">${i.fileName}</td>
-    </tr>`
-  ).join('');
-
-  let modal = document.getElementById('actualsAuditModal');
-  if(!modal){
-    modal = document.createElement('div');
-    modal.id = 'actualsAuditModal';
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-    document.body.appendChild(modal);
-  }
-  modal.innerHTML = `
-    <div style="background:white;border-radius:14px;max-width:880px;width:100%;max-height:85vh;overflow-y:auto;padding:26px 28px;font-family:'Sora',sans-serif">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <h2 style="font-size:17px;font-weight:700;color:var(--text)">🔍 CSV Upload Audit</h2>
-        <button onclick="document.getElementById('actualsAuditModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">✕</button>
-      </div>
-      <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-        Found <strong>${allIssues.length}</strong> day/city slot(s) where a CSV was uploaded but its data never pulled into the driver fields — either an Estimated CSV with zero drivers parsed, or an Actuals CSV with no Act First/Last Stop filled in. Go to each one below and re-upload the correct file, then hit <strong>Save Week</strong> to lock the fix into that week's archive.
-      </p>
-      <div style="overflow-x:auto">
-        <table class="wi-table">
-          <thead><tr><th>Type</th><th>Week</th><th>Day</th><th>City</th><th>Drivers</th><th>File Uploaded</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
 
 // Store current week state when navigating away
 let savedCurrentState = null;
@@ -1805,6 +1672,55 @@ function sR(id,val,cls){const el=document.getElementById(id);if(!el)return;el.te
 function recomputeAll(day,city){for(const n in state[day][city].drivers)compute(day,city,n);}
 
 // ── WEEKLY ────────────────────────────────────────────────────────────────────
+// ── 8-WEEK $/BOX TREND CHART ──────────────────────────────────────────────────
+// Always shows up to 8 weeks for this city: if the current in-progress week
+// has data, it's the rightmost bar (highlighted orange) and the 7 most
+// recent saved weeks fill the rest; otherwise it's simply the 8 most
+// recent saved weeks. Purely a read-only insight — doesn't touch state.
+function buildBoxCostTrendChart(city){
+  const bars = [];
+  const includeCurrent = viewingArchiveIndex < 0;
+  let currentBar = null;
+  if(includeCurrent){
+    const {boxes, avg} = computeCityBoxAndPay(state, city);
+    if(boxes>0) currentBar = {label:'This week', avg, boxes, current:true};
+  }
+  const archivedSlots = currentBar ? 7 : 8;
+  const recentArchived = weekArchive.slice(0, archivedSlots).slice().reverse(); // oldest→newest
+  recentArchived.forEach(snap=>{
+    const {boxes, avg} = computeCityBoxAndPay(snap.state, city);
+    if(boxes>0) bars.push({label: snap.label, avg, boxes, current:false});
+  });
+  if(currentBar) bars.push(currentBar);
+
+  if(!bars.length){
+    return `<div class="trend-card">
+      <div class="trend-card-head"><div class="trend-card-title">📈 8-Week Trend — Avg $/Box</div></div>
+      <div style="text-align:center;padding:20px 0;color:var(--text-muted);font-size:12.5px">Not enough saved weeks yet for ${city} — save a few weeks to start tracking trends here.</div>
+    </div>`;
+  }
+
+  const maxAvg = Math.max(...bars.map(b=>b.avg), 0.01);
+
+  const barsHtml = bars.map(b=>{
+    const h = Math.max((b.avg/maxAvg)*100, 5);
+    return `<div class="trend-bar-col${b.current?' is-current':''}" title="${b.label}: $${b.avg.toFixed(2)}/box · ${b.boxes} boxes">
+      <div class="trend-bar-value">$${b.avg.toFixed(2)}</div>
+      <div class="trend-bar-track"><div class="trend-bar-fill" style="height:${h}%"></div></div>
+      <div class="trend-bar-label">${b.label}${b.current?' 🟠':''}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="trend-card">
+    <div class="trend-card-head">
+      <div class="trend-card-title">📈 ${bars.length}-Week Trend — Avg $/Box (${city})</div>
+    </div>
+    <div class="trend-chart-outer">
+      <div class="trend-chart-bars">${barsHtml}</div>
+    </div>
+  </div>`;
+}
+
 function renderWeekly(){
   const main=document.getElementById('mainContent');
   const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
@@ -1819,6 +1735,7 @@ function renderWeekly(){
       `</button>`;
   }).join('')+`</div>`;
   main.innerHTML=subHtml;
+  main.innerHTML += buildBoxCostTrendChart(activeWeeklyCity);
 
   // columns matching the spreadsheet
   const COLS = [
@@ -1928,7 +1845,7 @@ function renderWeekly(){
               <div class="day-meta" style="margin-top:2px">${auDate(date)}</div>
             </div>
           </div>
-          <div class="day-meta">${totBoxes} boxes &nbsp;·&nbsp; Total Pay: ${fmtMoney(totFinal)}</div>
+          <div class="day-meta">${totBoxes} boxes &nbsp;·&nbsp; Total Pay: ${fmtMoney(totFinal)} &nbsp;·&nbsp; 🎯 ${totBoxes>0?'$'+(totFinal/totBoxes).toFixed(2):'—'}/box</div>
         </div>
         <table class="wi-table" style="min-width:1100px">
           ${thead}
@@ -1953,9 +1870,9 @@ function renderWeekly(){
   html+=`<div class="weekly-grand">
     <h3>Weekly Grand Total</h3>
     <div class="grand-grid">
-      <div class="grand-item"><div class="grand-label">Total Boxes</div><div class="grand-val">${grandB}</div></div>
-      <div class="grand-item"><div class="grand-label">Total Driver Pay</div><div class="grand-val">${fmtMoney(grandF)}</div></div>
-      <div class="grand-item"><div class="grand-label">Avg $ / Box</div><div class="grand-val">${grandB>0?'$'+(grandF/grandB).toFixed(2):'—'}</div></div>
+      <div class="grand-item"><div class="grand-icon">📦</div><div><div class="grand-label">Total Boxes</div><div class="grand-val">${grandB}</div></div></div>
+      <div class="grand-item"><div class="grand-icon">💰</div><div><div class="grand-label">Total Driver Pay</div><div class="grand-val">${fmtMoney(grandF)}</div></div></div>
+      <div class="grand-item"><div class="grand-icon">🎯</div><div><div class="grand-label">Avg $ / Box</div><div class="grand-val">${grandB>0?'$'+(grandF/grandB).toFixed(2):'—'}</div></div></div>
     </div>
   </div>
 
@@ -2029,7 +1946,7 @@ function renderWeekly(){
       <table class="wi-table">
         <thead><tr>
           <th>Driver</th><th>Days</th><th>Boxes</th>
-          <th>Delivery Costs</th><th>${colHeader}</th>
+          <th>Delivery Costs</th><th>$/Box</th><th>${colHeader}</th>
           <th>⛽ Fuel Comp</th><th>Net Pay</th>
         </tr></thead>
         <tbody>`;
@@ -2042,6 +1959,7 @@ function renderWeekly(){
         <td>${d.days}</td>
         <td>${d.boxes}</td>
         <td>${fmtMoney(d.finalPay)}</td>
+        <td style="color:#5a5a5a">${d.boxes>0?'$'+(d.finalPay/d.boxes).toFixed(2):'—'}</td>
         <td style="${frDeduction<0?'color:#c0392b':'color:#5a5a5a'}">
           ${frDeduction!==0?frDeduction.toFixed(2):'—'}
         </td>
@@ -2058,6 +1976,7 @@ function renderWeekly(){
       <tfoot><tr style="background:var(--olive-pale);color:#1b1c1e">
         <td>TOTAL</td><td>—</td><td>${cityBoxes}</td>
         <td>${fmtMoney(cityTotal)}</td>
+        <td>${cityBoxes>0?'$'+(cityTotal/cityBoxes).toFixed(2):'—'}</td>
         <td style="${totalFRDeduction<0?'color:#c0392b':''}">${totalFRDeduction!==0?totalFRDeduction.toFixed(2):'—'}</td>
         <td>${totalFuelComp>0?'+$'+Math.round(totalFuelComp):'—'}</td>
         <td>${fmtMoney(grandNet)}</td>
