@@ -1264,13 +1264,21 @@ function buildEstimatedStatusBanner(day, city){
   if(!names.length){
     return `<div class="status-banner error">
       <span style="font-size:16px">⚠️</span>
-      <span><strong>Estimated CSV uploaded but no driver data was pulled in.</strong> Check the file has "Driver Name", "Stop Number", "Start at" and "Finish by" columns matching what's expected, or that the correct file was uploaded. Re-upload the correct Estimated CSV above.</span>
+      <span><strong>Estimated CSV uploaded but no driver data was pulled in.</strong> The tool reads two Routific layouts: the old one ("Driver Name", "Stop Number", "Start at", "Finish by") and the new one ("Driver name", "Stop sequence", "Customer name" with START/END DEPOT rows, "Planned arrival/departure time"). Check the correct file was uploaded and re-upload the Estimated CSV above.</span>
     </div>`;
   }
-  return `<div class="status-banner success">
+  const fmtLabel = s._estFormat==='new' ? 'new Routific format' : 'old Routific format';
+  let html = `<div class="status-banner success">
     <span style="font-size:16px">✅</span>
-    <span><strong>Estimated CSV verified</strong> — ${names.length} driver(s) loaded successfully.</span>
+    <span><strong>Estimated CSV verified</strong> (${fmtLabel}) — ${names.length} driver(s) loaded successfully.</span>
   </div>`;
+  if(s._estUnnamedRoutes>0){
+    html += `<div class="status-banner error">
+      <span style="font-size:16px">⚠️</span>
+      <span><strong>${s._estUnnamedRoutes} route(s) have no driver name in the CSV</strong>, so they're shown as "Route 1", "Route 2"… in file order. Driver-specific rules (fixed rates, bonuses, $8/box), invoice details and fuel types won't apply to them, and the Actuals CSV won't match them by name. Assign drivers in Routific before exporting to fix this.</span>
+    </div>`;
+  }
+  return html;
 }
 
 // ── ACTUALS STATUS BANNER ─────────────────────────────────────────────────────
@@ -1385,27 +1393,112 @@ function parseCSV(text) {
 function onEst(day,city,e){const f=e.target.files[0];if(f)loadEst(day,city,f);}
 function onAct(day,city,e){const f=e.target.files[0];if(f)loadAct(day,city,f);}
 
+// ── NEW ROUTIFIC FORMAT SUPPORT ───────────────────────────────────────────────
+// Routific has two "Solution Download" layouts:
+//   OLD: Driver Name, Stop Number (0 / 999 for depots), Start at, Finish by,
+//        Distance(km), Types — 24-hour times (e.g. "15:09").
+//   NEW: Route name, Driver name, Stop sequence, Customer name
+//        ("-- START DEPOT --" / "-- END DEPOT --" rows), Start At,
+//        Planned arrival time, Planned departure time, Distance (km), Tags —
+//        12-hour times (e.g. "7:57am").
+// The new layout is converted into the old one here, so every calculation
+// below keeps working exactly as before. Old files pass through untouched.
+function isNewRoutificFormat(h){
+  return h.indexOf('Driver Name')<0 && h.indexOf('Stop sequence')>=0 && h.indexOf('Customer name')>=0;
+}
+
+// "7:57am" → "07:57", "12:05pm" → "12:05", "12:10am" → "00:10".
+// Anything already in 24-hour form ("15:09") is returned as-is.
+function to24h(t){
+  if(!t) return '';
+  const m = String(t).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
+  if(!m) return String(t).trim();
+  let hh = parseInt(m[1]) % 12;
+  if(m[3]==='pm') hh += 12;
+  return String(hh).padStart(2,'0')+':'+m[2];
+}
+
+// Returns { rows, unnamedRoutes } where rows uses the OLD headers.
+// When "Driver name" is blank (plan not dispatched yet), each route is
+// labelled "Route 1", "Route 2"… in the order it appears in the file.
+// mode 'est' (default) uses the planned times; mode 'act' uses the actual
+// times the driver app recorded (Actual arrival/departure, Delivery attempt).
+function normalizeNewRoutific(rows, mode){
+  const h = rows[0], idx = k => h.indexOf(k);
+  const get = (r,k) => (idx(k)>=0 ? (r[idx(k)]||'') : '').trim();
+
+  // Pass 1 — split into route blocks (each starts at a START DEPOT row)
+  const blocks = [];
+  let cur = null;
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i], cust = get(r,'Customer name');
+    if(cust==='-- START DEPOT --' || !cur){ cur = { rows:[] }; blocks.push(cur); }
+    cur.rows.push(r);
+    if(cust==='-- END DEPOT --') cur = null;
+  }
+
+  // Pass 2 — name each block and convert its rows
+  const out = [['Driver Name','Stop Number','Start at','Finish by','Distance(km)','Types']];
+  let unnamedRoutes = 0;
+  blocks.forEach((b, bi) => {
+    let name = '';
+    for(const r of b.rows){ const n = get(r,'Driver name'); if(n){ name = n; break; } }
+    if(!name){ name = 'Route '+(bi+1); unnamedRoutes++; }
+    b.rows.forEach(r => {
+      const cust = get(r,'Customer name');
+      let stop, startAt, finishBy = '';
+      if(cust==='-- START DEPOT --'){ stop = 0;   startAt = get(r,'Planned departure time') || get(r,'Planned arrival time'); }
+      else if(cust==='-- END DEPOT --'){ stop = 999; startAt = get(r,'Planned arrival time') || get(r,'Planned departure time'); }
+      else if(mode==='act'){
+        stop = get(r,'Stop sequence');
+        startAt = get(r,'Actual arrival time') || get(r,'Delivery attempt time');
+        finishBy = get(r,'Actual departure time') || get(r,'Delivery attempt time');
+      }
+      else {
+        stop = get(r,'Stop sequence');
+        startAt = get(r,'Start At') || get(r,'Planned arrival time');
+        finishBy = get(r,'Planned departure time');
+      }
+      out.push([name, String(stop), to24h(startAt), to24h(finishBy), get(r,'Distance (km)'), get(r,'Tags')]);
+    });
+  });
+  return { rows: out, unnamedRoutes };
+}
+
+// Turns parsed CSV rows (old layout) into the drivers object.
+function parseEstRows(rows){
+  const h=rows[0],idx=k=>h.indexOf(k);
+  const drivers={};
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i],name=r[idx('Driver Name')],stop=parseInt(r[idx('Stop Number')]);
+    const startAt=r[idx('Start at')]||'',km=parseFloat(r[idx('Distance(km)')])||0;
+    if(!name)continue;
+    if(!drivers[name])drivers[name]={name,stops:0,depotStart:null,depotEnd:null,totalKm:0,estLastTime:null,_c:{}};
+    const d=drivers[name];
+    if(stop===0){d.depotStart=startAt;continue;}
+    if(stop===999){d.depotEnd=startAt;continue;}
+    d.totalKm+=km;
+    d.stops++;
+    const finishBy=r[idx('Finish by')]||'';
+    if(finishBy)d.estLastTime=finishBy;
+  }
+  Object.keys(drivers).forEach(n=>{if(!drivers[n].depotStart)delete drivers[n];});
+  return drivers;
+}
+
 function loadEst(day,city,file){
   const reader=new FileReader();
   reader.onload=e=>{
-    const rows=parseCSV(e.target.result),h=rows[0],idx=k=>h.indexOf(k);
-    const drivers={};
-    for(let i=1;i<rows.length;i++){
-      const r=rows[i],name=r[idx('Driver Name')],stop=parseInt(r[idx('Stop Number')]);
-      const startAt=r[idx('Start at')]||'',km=parseFloat(r[idx('Distance(km)')])||0;
-      if(!name)continue;
-      if(!drivers[name])drivers[name]={name,stops:0,depotStart:null,depotEnd:null,totalKm:0,estLastTime:null,_c:{}};
-      const d=drivers[name];
-      if(stop===0){d.depotStart=startAt;continue;}
-      if(stop===999){d.depotEnd=startAt;continue;}
-      d.totalKm+=km;
-      d.stops++;
-      const finishBy=r[idx('Finish by')]||'';
-      if(finishBy)d.estLastTime=finishBy;
+    let rows=parseCSV(e.target.result.replace(/^﻿/,''));
+    let format='old', unnamedRoutes=0;
+    if(rows.length && isNewRoutificFormat(rows[0])){
+      const n=normalizeNewRoutific(rows);
+      rows=n.rows; unnamedRoutes=n.unnamedRoutes; format='new';
     }
-    Object.keys(drivers).forEach(n=>{if(!drivers[n].depotStart)delete drivers[n];});
+    const drivers=parseEstRows(rows);
     const s=state[day][city];
     s.drivers=drivers; s.estLoaded=true; s._estFile=file.name;
+    s._estFormat=format; s._estUnnamedRoutes=unnamedRoutes;
     updateDot(day,city); buildMain();
     setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); autoSaveSession(); }, 50);
   };
@@ -1415,7 +1508,9 @@ function loadEst(day,city,file){
 function loadAct(day,city,file){
   const reader=new FileReader();
   reader.onload=e=>{
-    const rows=parseCSV(e.target.result),h=rows[0],idx=k=>h.indexOf(k);
+    let rows=parseCSV(e.target.result.replace(/^\uFEFF/,''));
+    if(rows.length && isNewRoutificFormat(rows[0])) rows=normalizeNewRoutific(rows,'act').rows;
+    const h=rows[0],idx=k=>h.indexOf(k);
     const act={};
     for(let i=1;i<rows.length;i++){
       const r=rows[i],name=r[idx('Driver Name')],stop=parseInt(r[idx('Stop Number')]);
@@ -2154,7 +2249,9 @@ function loadFoodReliefCSV(day,city,event){
   const file=event.target.files[0]; if(!file)return;
   const reader=new FileReader();
   reader.onload=e=>{
-    const rows=parseCSV(e.target.result),h=rows[0];
+    let rows=parseCSV(e.target.result.replace(/^﻿/,''));
+    if(rows.length && isNewRoutificFormat(rows[0])) rows=normalizeNewRoutific(rows).rows;
+    const h=rows[0];
     const foodData={};
     // detect column names — support both Routific full CSV and simplified food relief CSV
     const nameCol   = h.indexOf('Driver Name')>=0 ? 'Driver Name' : 'Driver';
