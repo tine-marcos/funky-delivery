@@ -807,7 +807,7 @@ function computeCityBoxAndPay(weekState, city){
     if(!s || !s.drivers) return;
     for(const name in s.drivers){
       const d = s.drivers[name], cv = d._c||{};
-      boxes += cv.actBoxes || d.stops || 0;
+      boxes += paidBoxes(s, d);
       pay   += cv.finalPay || 0;
     }
   });
@@ -823,7 +823,7 @@ function computeCityNetPay(city){
     const drivers = s.drivers||{};
     for(const name in drivers){
       const d = drivers[name], cv = d._c||{};
-      const actBoxes = cv.actBoxes||d.stops||0;
+      const actBoxes = paidBoxes(s, d);
       const finalPay = cv.finalPay||0;
       const wk = name;
       if(!driverW[wk]) driverW[wk] = {name, boxes:0, finalPay:0};
@@ -1446,12 +1446,14 @@ function buildImportGrid(selDay, selCity){
       const s = state[day][c], sel = day===selDay && c===selCity;
       const n = Object.keys(s.drivers||{}).length;
       const warn = s.estLoaded ? cellWarnCount(day,c) : 0;
+      const wl = s.estLoaded ? weekWarnings().filter(w=>w.day===day && w.city===c && w.level!=='low') : [];
+      const tip = wl.length ? (wl.map(w=>'• '+(w.driver?w.driver+': ':'')+w.msg).join('\n')+'\n\nClick to open · full list in Weekly Summary').replace(/"/g,'&quot;') : 'Click to open';
       let icon, text, bg;
       if(!s.estLoaded){ icon='＋'; text='Empty'; bg='#faf8f3'; }
       else if(!s.actLoaded){ icon='📋'; text=n+' drivers · no actuals'; bg='#fff8ec'; }
       else { icon='✅'; text=n+' drivers'; bg='#eef7ee'; }
       if(warn) { icon='⚠️'; text += ' · '+warn+' warning'+(warn>1?'s':''); bg='#fff1f1'; }
-      return `<td style="padding:4px"><button onclick="activeTab='${day}';activeCity['${day}']='${c}';window._lastImportDay='${day}';buildMain()"
+      return `<td style="padding:4px"><button title="${tip}" onclick="activeTab='${day}';activeCity['${day}']='${c}';window._lastImportDay='${day}';buildMain()"
         style="width:100%;border-radius:9px;border:${sel?'2px solid var(--olive)':'1px solid var(--border)'};background:${bg};padding:7px 8px;cursor:pointer;font-family:Sora,sans-serif;font-size:12px;text-align:left;display:flex;gap:7px;align-items:center;${sel?'box-shadow:0 0 0 3px var(--olive-pale)':''}">
         <span>${icon}</span><span style="color:#1b1c1e">${text}</span></button></td>`;
     }).join('');
@@ -1753,6 +1755,7 @@ function buildDriverTable(day, city){
       <td>${d.stops}</td>
       <td><input type="number" class="dt-in narrow" id="${key}_${name}_adj" value="${c.adj||0}" oninput="compute('${day}','${city}','${name}')"></td>
       <td><span id="${key}_${name}_actBoxes_display">${c.actBoxes||d.stops}</span><input type="hidden" id="${key}_${name}_actBoxes" value="${c.actBoxes||d.stops}"></td>
+      <td class="r-val dt-pay" id="${key}_${name}_paidBoxes" title="Act boxes + adjustment — what Final Pay is based on">${(c.actBoxes||d.stops)+(c.adj||0)}</td>
       <td>${d.depotStart||'—'}</td><td>${d.depotEnd||'—'}</td><td>${estHrs}</td>
       <td><span id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</span><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></td>
       <td><span id="${key}_${name}_actLast_display">${c._actLast||'—'}</span><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></td>
@@ -1768,15 +1771,15 @@ function buildDriverTable(day, city){
   }
   const t = driverTableTotals(day, city);
   return `<div class="dt-wrap"><table class="drv-table">
-    <thead><tr><th>Driver</th><th>Rate/hr</th><th>Est boxes</th><th>Adj ✎</th><th>Act boxes</th><th>Run start</th><th>Run end</th><th>Est hrs</th><th>Act first</th><th>Act last</th><th>Bonus &amp; fines ✎</th><th>Est pay</th><th>Final/box</th><th>Final hourly</th><th>Final pay</th><th>Speed</th><th>6PM</th><th style="display:none"></th></tr></thead>
+    <thead><tr><th>Driver</th><th>Rate/hr</th><th>Est boxes</th><th>Adj ✎</th><th>Act boxes</th><th title="Act boxes + adjustment — what Final Pay is based on">Paid boxes</th><th>Run start</th><th>Run end</th><th>Est hrs</th><th>Act first</th><th>Act last</th><th>Bonus &amp; fines ✎</th><th>Est pay</th><th>Final/box</th><th>Final hourly</th><th>Final pay</th><th>Speed</th><th>6PM</th><th style="display:none"></th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td>TOTAL</td><td></td><td></td><td></td><td id="tot-${key}-boxes">${t.boxes}</td><td></td><td></td><td></td><td></td><td></td><td id="tot-${key}-bonus">${t.bonus?'$'+t.bonus.toFixed(2):'—'}</td><td id="tot-${key}-est">${fmtMoney(t.est)}</td><td></td><td></td><td id="tot-${key}-final">${fmtMoney(t.final)}</td><td></td><td></td><td style="display:none"></td></tr></tfoot>
+    <tfoot><tr><td>TOTAL</td><td></td><td></td><td></td><td id="tot-${key}-boxes">${t.boxes}</td><td id="tot-${key}-paid">${t.paid}</td><td></td><td></td><td></td><td></td><td></td><td id="tot-${key}-bonus">${t.bonus?'$'+t.bonus.toFixed(2):'—'}</td><td id="tot-${key}-est">${fmtMoney(t.est)}</td><td></td><td></td><td id="tot-${key}-final">${fmtMoney(t.final)}</td><td></td><td></td><td style="display:none"></td></tr></tfoot>
   </table></div>`;
 }
 function driverTableTotals(day, city){
-  const D = state[day][city].drivers; let boxes=0, est=0, final=0, bonus=0;
-  for(const n in D){ const c=D[n]._c||{}; boxes+=(c.actBoxes||D[n].stops); est+=(c.estPay||0); final+=(c.finalPay||0); bonus+=(c.bonus||0)+(c.fixedBonus||0); }
-  return {boxes, est, final, bonus};
+  const D = state[day][city].drivers; let boxes=0, paid=0, est=0, final=0, bonus=0;
+  for(const n in D){ const c=D[n]._c||{}; boxes+=(c.actBoxes||D[n].stops); paid+=(c.actBoxes||D[n].stops)+(c.adj||0); est+=(c.estPay||0); final+=(c.finalPay||0); bonus+=(c.bonus||0)+(c.fixedBonus||0); }
+  return {boxes, paid, est, final, bonus};
 }
 function updateDriverTableTotals(day, city){
   const key = `${day}-${city}`, el = document.getElementById(`tot-${key}-final`);
@@ -1785,6 +1788,7 @@ function updateDriverTableTotals(day, city){
   el.textContent = fmtMoney(t.final);
   document.getElementById(`tot-${key}-est`).textContent = fmtMoney(t.est);
   document.getElementById(`tot-${key}-boxes`).textContent = t.boxes;
+  const tp = document.getElementById(`tot-${key}-paid`); if(tp) tp.textContent = t.paid;
   document.getElementById(`tot-${key}-bonus`).textContent = t.bonus ? '$'+t.bonus.toFixed(2) : '—';
 }
 
@@ -2482,6 +2486,14 @@ function getRules(s){
 }
 function rulesFor(day, city){ return getRules(state[day][city]); }
 function frRateFor(day, city){ return rulesFor(day, city).foodReliefRate; }
+// Boxes the driver is actually PAID for = Act boxes + # Adjustment (that's
+// how Final Pay has always been worked out). Weeks from 19 Oct use this for
+// box counts in totals, the Weekly Summary and invoice quantities; older
+// weeks keep showing Act boxes as they always did.
+function paidBoxes(s, d){
+  const c = (d && d._c) || {}, base = c.actBoxes || (d && d.stops) || 0;
+  return isRateWeekEligible(s) ? base + (c.adj||0) : base;
+}
 // The week being viewed, if it's from 19 Oct onwards (any of its day/cities)
 function viewedEligibleState(){
   for(const d of ALL_DAYS) for(const c of DAY_CITIES[d]) if(isRateWeekEligible(state[d][c])) return state[d][c];
@@ -2896,6 +2908,7 @@ function compute(day,city,name){
   sR(`${key}_${name}_finalPerBox`,fmt(finalPerBox),finalPerBox<=pbMin?'warn':'ok');
   sR(`${key}_${name}_finalHourly`,fmt(finalHourly));
   sR(`${key}_${name}_finalPay`,fmt(finalPay),'ok');
+  sR(`${key}_${name}_paidBoxes`, String(actBoxes+adj), adj ? 'warn' : '');
   sR(`${key}_${name}_timeTaken`,timeTaken>0?timeTaken.toFixed(1)+' min':'—');
   if(speed!==null)sR(`${key}_${name}_speed`,pct(speed),speed>=90?'ok':'bad');
   const sixPMClass = sixPM.includes('Okay') ? 'ok' : sixPM === '—' ? '' : (() => {
@@ -3021,6 +3034,9 @@ function weekWarnings(){
       if(hrs===null || hrs<=0) add('high', day, city, n, 'Route start/end times look wrong ('+(d.depotStart||'—')+' → '+(d.depotEnd||'—')+')');
       else if(hrs > W.maxHours) add('mid', day, city, n, 'Long route: '+hrs.toFixed(2)+' hrs (over '+W.maxHours+')');
       if(c._actFirst && c._actLast && tM(c._actLast) < tM(c._actFirst)) add('high', day, city, n, 'Actual last stop is before first stop');
+      const actB = c.actBoxes || d.stops, adjB = c.adj || 0;
+      if(c.actBoxes && adjB && Math.sign(adjB) === Math.sign(actB - d.stops) && actB !== d.stops)
+        add('high', day, city, n, 'Adjustment may be counted twice: Actuals already have '+actB+' boxes vs '+d.stops+' planned, and Adj '+(adjB>0?'+':'')+adjB+' is also applied — paid for '+(actB+adjB)+' boxes');
       if((c.finalPerBox||0) > W.maxPerBox) add('mid', day, city, n, 'High Final/Box: $'+c.finalPerBox.toFixed(2)+' (over $'+W.maxPerBox+')');
       const late = (c.sixPM||'').match(/\+(\d+):(\d+)/);
       if(late && (parseInt(late[1])*60+parseInt(late[2])) >= W.lateMins) add('low', day, city, n, 'Finished late ('+c.sixPM+')');
@@ -3128,7 +3144,7 @@ function renderWeekly(){
         const speed=cv.speed!=null?Math.round(cv.speed)+'%':'—';
         const finalHourly=cv.finalHourly||0;
         const finalPay=cv.finalPay||0;
-        totBoxes+=actBoxes; totEst+=estPay; totFinal+=finalPay;
+        totBoxes+=paidBoxes(s,d); totEst+=estPay; totFinal+=finalPay;
 
         rows+=`<tr>
           <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
@@ -3154,7 +3170,7 @@ function renderWeekly(){
         // weekly driver totals
         const wk=name+'||'+city;
         if(!driverW[wk])driverW[wk]={name,city,boxes:0,finalPay:0,days:0};
-        driverW[wk].boxes+=actBoxes; driverW[wk].finalPay+=finalPay; driverW[wk].days++;
+        driverW[wk].boxes+=paidBoxes(s,d); driverW[wk].finalPay+=finalPay; driverW[wk].days++;
       }
 
       grandB+=totBoxes; grandF+=totFinal;
@@ -4076,7 +4092,7 @@ function renderInvoice(){
       const d = s.drivers[name]; if(!d) return;
       const cv = d._c||{};
       lineItems.push({
-        date, qty: cv.actBoxes||d.stops,
+        date, qty: paidBoxes(s, d),
         unitPrice: cv.finalPerBox||0,
         additional: (cv.bonus||0)+(cv.fixedBonus||0),
         total: cv.finalPay||0
@@ -4360,7 +4376,7 @@ function generateInvoicePDF(name, city, invNum){
     if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo) return;
     const d=s.drivers[name]; if(!d) return;
     const cv=d._c||{};
-    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
+    lineItems.push({date,qty:paidBoxes(s,d),unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
   });
 
   const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
@@ -4566,7 +4582,7 @@ function buildInvoiceHTML(name,city,invNum){
     if(invoiceSettings.dateTo&&date>invoiceSettings.dateTo)return;
     const d=s.drivers[name]; if(!d)return;
     const cv=d._c||{};
-    lineItems.push({date,qty:cv.actBoxes||d.stops,unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
+    lineItems.push({date,qty:paidBoxes(s,d),unitPrice:cv.finalPerBox||0,additional:(cv.bonus||0)+(cv.fixedBonus||0),total:cv.finalPay||0});
   });
   if(!lineItems.length) return null;
   const subtotal=lineItems.reduce((a,l)=>a+l.total,0);
