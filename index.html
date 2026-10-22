@@ -1328,6 +1328,20 @@ function buildActualsStatusBanner(day, city){
   </div>`;
 }
 
+// Shown after an extra CSV is added (week of 19 Oct onwards): who was added,
+// and who was skipped because they were already loaded from an earlier CSV.
+function buildLastAddBanner(day, city){
+  const a = state[day][city]._lastAdd;
+  if(!a) return '';
+  const list = arr => arr.map(n=>`<strong>${n}</strong>`).join(', ');
+  let msg = `<strong>Extra ${a.kind} CSV added</strong> (${a.file}) — `;
+  msg += a.added.length ? `${a.kind==='Estimated'?'added':'actuals filled for'} ${a.added.length} driver(s): ${list(a.added)}.` : `no new drivers ${a.kind==='Estimated'?'added':'filled'}.`;
+  if(a.skipped.length) msg += ` Skipped ${a.skipped.length} already loaded from an earlier CSV (kept as is): ${list(a.skipped)}.`;
+  if(a.notFound && a.notFound.length) msg += ` Not in the Estimated CSVs (upload their Estimated CSV first): ${list(a.notFound)}.`;
+  const warn = !a.added.length || (a.notFound && a.notFound.length);
+  return `<div class="status-banner ${warn?'error':'success'}"><span style="font-size:16px">${warn?'⚠️':'➕'}</span><span>${msg}</span></div>`;
+}
+
 function buildCityBody(day, city) {
   const s   = state[day][city];
   const key = `${day}-${city}`;
@@ -1337,22 +1351,23 @@ function buildCityBody(day, city) {
       <div class="upload-card${s.estLoaded?' done':''}" id="upEst-${key}" onclick="document.getElementById('fEst-${key}').click()">
         <div class="upload-icon">📋</div>
         <h3>1. Upload Estimated CSV</h3>
-        <p>Routific plan — before deliveries</p>
-        <input type="file" id="fEst-${key}" accept=".csv" onchange="onEst('${day}','${city}',event)">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fEst-${key}').click()">Choose Estimated CSV</button>
-        <div class="file-name" id="nEst-${key}">${s.estLoaded?'✓ '+s._estFile:''}</div>
+        <p>${isMultiCsvAddMode(s)?'Extra CSVs only ADD new drivers — loaded drivers stay as they are':'Routific plan — before deliveries'}</p>
+        <input type="file" id="fEst-${key}" accept=".csv" onchange="onEst('${day}','${city}',event);this.value=''">
+        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fEst-${key}').click()">${isMultiCsvAddMode(s)?'＋ Add another Estimated CSV':'Choose Estimated CSV'}</button>
+        <div class="file-name" id="nEst-${key}">${s.estLoaded?((s._estFiles&&s._estFiles.length>1)?s._estFiles.map((f,i)=>'✓ '+(i===0?'(1st) ':'(+) ')+f).join('<br>'):'✓ '+s._estFile):''}</div>
       </div>
       <div class="upload-card${s.actLoaded?' done':s.estLoaded?'':' locked'}" id="upAct-${key}" onclick="document.getElementById('fAct-${key}').click()">
         <div class="upload-icon">✅</div>
         <h3>2. Upload Actuals CSV</h3>
-        <p>Completed run — after deliveries</p>
-        <input type="file" id="fAct-${key}" accept=".csv" onchange="onAct('${day}','${city}',event)">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fAct-${key}').click()">Choose Actuals CSV</button>
-        <div class="file-name" id="nAct-${key}">${s.actLoaded?'✓ '+s._actFile:''}</div>
+        <p>${isActAddMode(s)?'Extra CSVs only fill drivers with no actuals yet':'Completed run — after deliveries'}</p>
+        <input type="file" id="fAct-${key}" accept=".csv" onchange="onAct('${day}','${city}',event);this.value=''">
+        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fAct-${key}').click()">${isActAddMode(s)?'＋ Add another Actuals CSV':'Choose Actuals CSV'}</button>
+        <div class="file-name" id="nAct-${key}">${s.actLoaded?((s._actFiles&&s._actFiles.length>1)?s._actFiles.map((f,i)=>'✓ '+(i===0?'(1st) ':'(+) ')+f).join('<br>'):'✓ '+s._actFile):''}</div>
       </div>
     </div>
     ${buildEstimatedStatusBanner(day,city)}
     ${buildActualsStatusBanner(day,city)}
+    ${buildLastAddBanner(day,city)}
     <div class="config-row">
       <div class="config-card">
         <label>Delivery Date${day==='Tuesday'?' ✎':' (auto)'}</label>
@@ -1441,7 +1456,7 @@ function to24h(t){
 // labelled "Route 1", "Route 2"… in the order it appears in the file.
 // mode 'est' (default) uses the planned times; mode 'act' uses the actual
 // times the driver app recorded (Actual arrival/departure, Delivery attempt).
-function normalizeNewRoutific(rows, mode){
+function normalizeNewRoutific(rows, mode, taken){
   const h = rows[0], idx = k => h.indexOf(k);
   const get = (r,k) => (idx(k)>=0 ? (r[idx(k)]||'') : '').trim();
 
@@ -1457,11 +1472,17 @@ function normalizeNewRoutific(rows, mode){
 
   // Pass 2 — name each block and convert its rows
   const out = [['Driver Name','Stop Number','Start at','Finish by','Distance(km)','Types']];
-  let unnamedRoutes = 0;
+  let unnamedRoutes = 0, nextRoute = 1;
   blocks.forEach((b, bi) => {
     let name = '';
     for(const r of b.rows){ const n = get(r,'Driver name'); if(n){ name = n; break; } }
-    if(!name){ name = 'Route '+(bi+1); unnamedRoutes++; }
+    if(!name){
+      if(taken){ // extra CSV: pick the next "Route N" not already used
+        while(taken.has('Route '+nextRoute)) nextRoute++;
+        name = 'Route '+nextRoute; nextRoute++;
+      } else name = 'Route '+(bi+1);
+      unnamedRoutes++;
+    }
     b.rows.forEach(r => {
       const cust = get(r,'Customer name');
       let stop, startAt, finishBy = '';
@@ -1513,15 +1534,67 @@ function loadEst(day,city,file){
       const n=normalizeNewRoutific(rows);
       rows=n.rows; unnamedRoutes=n.unnamedRoutes; format='new';
     }
-    const drivers=parseEstRows(rows);
     const s=state[day][city];
+    if(isMultiCsvAddMode(s)){ addEstimatedCsv(day,city,file,e.target.result); return; }
+    const drivers=parseEstRows(rows);
     s.drivers=drivers; s.estLoaded=true; s._estFile=file.name;
     s._estFormat=format; s._estUnnamedRoutes=unnamedRoutes;
+    if(isRateWeekEligible(s)){ s._estFiles=[file.name]; s._lastAdd=null; }
     updateDot(day,city); buildMain();
-    setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); autoSaveSession(); }, 50);
+    setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); autoSaveSession(); if(isRateWeekEligible(s)) saveViewedArchiveWeek(); }, 50);
   };
   reader.readAsText(file);
 }
+
+// ── MULTIPLE CSVs (WEEK OF 19 OCT 2026 ONWARDS) ──────────────────────────────
+// From the week of 19 Oct 2026, more than one Estimated / Actuals CSV can be
+// uploaded per day & city. The FIRST CSV is the source of truth:
+//   • An extra Estimated CSV only ADDS drivers that aren't loaded yet. Any
+//     driver already loaded is skipped — their stops, times and pay are never
+//     touched.
+//   • An extra Actuals CSV only fills drivers that don't have actuals yet.
+//     Drivers that already got actuals from an earlier CSV are skipped.
+//   • Only the newly added/filled drivers are calculated; nobody else is.
+// Weeks before 19 Oct 2026 work exactly as before (a new upload replaces).
+// To start a day/city over, use "✕ Clear" and upload again.
+function isMultiCsvAddMode(s){
+  return !!(s && s.estLoaded && isRateWeekEligible(s) && Object.keys(s.drivers||{}).length > 0);
+}
+function isActAddMode(s){
+  return !!(s && s.actLoaded && isRateWeekEligible(s));
+}
+// True when a driver already has actuals from an earlier Actuals CSV
+function driverHasActuals(d){
+  return !!(d && (d._actFile || (d._c && (d._c._actFirst || d._c._actLast))));
+}
+
+function addEstimatedCsv(day, city, file, text){
+  const s = state[day][city];
+  let rows = parseCSV(text.replace(/^\uFEFF/,''));
+  let unnamed = 0;
+  if(rows.length && isNewRoutificFormat(rows[0])){
+    const n = normalizeNewRoutific(rows, 'est', new Set(Object.keys(s.drivers)));
+    rows = n.rows; unnamed = n.unnamedRoutes;
+  }
+  const incoming = parseEstRows(rows);
+  const added = [], skipped = [];
+  for(const name in incoming){
+    if(s.drivers[name]){ skipped.push(name); continue; }   // already loaded — keep the original
+    incoming[name]._estFile = file.name;
+    s.drivers[name] = incoming[name];
+    added.push(name);
+  }
+  if(!s._estFiles) s._estFiles = [s._estFile];
+  s._estFiles.push(file.name);
+  if(unnamed && added.some(n=>/^Route \d+$/.test(n))) s._estUnnamedRoutes = (s._estUnnamedRoutes||0) + added.filter(n=>/^Route \d+$/.test(n)).length;
+  s._lastAdd = { kind:'Estimated', file:file.name, added, skipped };
+  updateDot(day,city); buildMain();
+  setTimeout(()=>{
+    added.forEach(name=>compute(day,city,name));             // only the new drivers
+    autoSaveSession(); saveViewedArchiveWeek();
+  }, 50);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function loadAct(day,city,file){
   const reader=new FileReader();
@@ -1544,20 +1617,35 @@ function loadAct(day,city,file){
       if(t){if(!d.firstStop)d.firstStop=t; d.lastStop=t;}
     }
     const key=`${day}-${city}`;
+    const sAct=state[day][city];
+    const addMode=isActAddMode(sAct), eligible=isRateWeekEligible(sAct);
+    const filled=[], skipped=[], notFound=[];
     for(const name in act){
-      if(!state[day][city].drivers[name])continue;
+      if(!state[day][city].drivers[name]){ if(addMode) notFound.push(name); continue; }
+      // Extra Actuals CSV: never overwrite a driver who already has actuals
+      if(addMode && driverHasActuals(state[day][city].drivers[name])){ skipped.push(name); continue; }
       const a=act[name],dc=state[day][city].drivers[name]._c;
       dc._actFirst=a.firstStop?a.firstStop.substring(0,5):'';
       dc._actLast =a.lastStop ?a.lastStop.substring(0,5):'';
       if(a.actBoxes>0)dc.actBoxes=a.actBoxes;
       dc.foodBoxes=a.foodBoxes||0;
+      if(eligible) state[day][city].drivers[name]._actFile=file.name;
+      filled.push(name);
     }
-    state[day][city].actLoaded=true; state[day][city]._actFile=file.name;
+    if(addMode){
+      if(!sAct._actFiles) sAct._actFiles=[sAct._actFile];
+      sAct._actFiles.push(file.name);
+      sAct._lastAdd={ kind:'Actuals', file:file.name, added:filled, skipped, notFound };
+    } else {
+      state[day][city].actLoaded=true; state[day][city]._actFile=file.name;
+      if(eligible){ sAct._actFiles=[file.name]; }
+    }
     updateDot(day,city); buildMain();
-    setTimeout(()=>autoSaveSession(), 100);
+    setTimeout(()=>{ autoSaveSession(); if(eligible) saveViewedArchiveWeek(); }, 100);
     setTimeout(()=>{
       const k=`${day}-${city}`;
       for(const name in state[day][city].drivers){
+        if(addMode && !filled.includes(name)) continue; // extra CSV: only the newly filled drivers
         const dc=state[day][city].drivers[name]._c||{};
         const fd=document.getElementById(`${k}_${name}_actFirst_display`);
         const ld=document.getElementById(`${k}_${name}_actLast_display`);
