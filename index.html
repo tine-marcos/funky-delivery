@@ -612,6 +612,16 @@ function setTuesdayDate(city, tuesdayVal){
     const iso = d.toISOString().split('T')[0];
     CITIES.forEach(c => { if(state[day][c]) state[day][c].date = iso; });
   });
+  // Hourly rate: weeks before 19 Oct 2026 always use the original rate, so
+  // clear any rate stamped on the current week if its date moved back.
+  ALL_DAYS.forEach(day => { CITIES.forEach(c => {
+    const st = state[day][c];
+    if(st && !isRateWeekEligible(st)){
+      if(st._rate !== undefined) delete st._rate;
+      for(const n in (st.drivers||{})) if('_rateOv' in st.drivers[n]) delete st.drivers[n]._rateOv;
+    }
+  }); });
+  ALL_DAYS.forEach(day => { DAY_CITIES[day].forEach(c => { if(state[day][c].estLoaded) recomputeAll(day,c); }); });
   buildMain();
   updateWeekNav(); // refresh date range label
 }
@@ -1077,7 +1087,7 @@ function renderPayPreview(){
     const cv = d._c||{};
     const det = (driverDetails[previewCity]&&driverDetails[previewCity][name])||{};
     const zone = det.zone||'—';
-    const rate = getFixedRate(previewCity,name)||s._rate||62;
+    const rate = getDriverRate(previewDay,previewCity,name);
     const estHrs = d.depotStart&&d.depotEnd ? ((tM(d.depotEnd)-tM(d.depotStart))/60) : 0;
     const estPay = cv.estPay||0;
     const estPerBox = cv.estPerBox||0;
@@ -1343,7 +1353,7 @@ function buildCityBody(day, city) {
           : `<div class="val" style="font-family:'DM Mono',monospace;font-size:13px">${auDate(s.date)}</div>`
         }
       </div>
-      <div class="config-card"><label>Rate / hr ($)</label><input type="number" id="rate-${key}" value="${s._rate||62}" step="0.01" oninput="s['${day}']['${city}']._rate=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
+      <div class="config-card"><label>Rate / hr ($)${isRateEditable(s)?' ✎':' 🔒'}</label><input type="number" id="rate-${key}" value="${getHourlyRate(s)}" step="0.01" ${isRateEditable(s)?`onchange="setHourlyRate('${day}','${city}',this.value)" title="Applies to all days & cities this week and future weeks"`:`disabled title="${isRateWeekEligible(s)?'Saved week — rate is frozen':'Weeks before 19 Oct 2026 keep their original rate'}"`}></div>
       <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
     </div>
     <div id="driverArea-${key}">
@@ -1575,6 +1585,9 @@ function buildDriverCards(day,city){
       </div>
       <div class="driver-body">
         <div class="fields-grid">
+          <div class="field-group"><label>Rate / hr ($) ${isRateEditable(state[day][city])?'✎':'🔒'}</label>${isRateEditable(state[day][city])
+            ? `<input type="number" class="tag-input" id="${key}_${name}_rate" value="${getDriverRate(day,city,name)}" step="0.01" onchange="setDriverRate('${day}','${city}','${name}',this.value)" title="This driver's own rate. Leave blank to use the default rate."${getDriverOwnRate(day,city,name)!==null?' style="color:#c0392b;font-weight:600"':''}>`
+            : `<div class="val">$${getDriverRate(day,city,name)}</div>`}</div>
           <div class="field-group"><label>Est # Boxes</label><div class="val">${d.stops}</div></div>
           <div class="field-group"><label># Adjustment ✎</label><input type="number" class="tag-input" id="${key}_${name}_adj" value="${c.adj||0}" oninput="compute('${day}','${city}','${name}')"></div>
           <div class="field-group"><label>Act # Boxes</label><div class="val" id="${key}_${name}_actBoxes_display">${c.actBoxes||d.stops}</div><input type="hidden" id="${key}_${name}_actBoxes" value="${c.actBoxes||d.stops}"></div>
@@ -1648,6 +1661,193 @@ function refreshMain(){ if(activeTab!=='Weekly') buildMain(); }
 function tM(t){if(!t)return null;const p=t.split(':');if(p.length<2)return null;return parseInt(p[0])*60+parseInt(p[1]);}
 function mD(t1,t2){const a=tM(t1),b=tM(t2);if(a===null||b===null)return null;return(b-a)/60;}
 
+// ── HOURLY RATE (EDITABLE FROM WEEK OF 19 OCT 2026) ──────────────────────────
+// The $/hr rate used for Est Pay used to be hard-coded at $62. From the week
+// of 19 Oct 2026 onwards it can be changed from the "Rate / hr" box on any
+// day/city. A change applies to every day & city of the CURRENT week, and
+// becomes the default for every new week after it (saved to Firebase).
+//
+// Previous weeks are NOT affected:
+//   • Any day dated before 19 Oct 2026 keeps the original rule exactly
+//     (s._rate || 62), and its Rate box is locked.
+//   • Each week stores the rate it used (s._rate) inside its own state, so
+//     once it's saved to the archive it keeps that rate forever, even if the
+//     live rate is changed later.
+//   • Archived weeks are view-only for the rate (box locked).
+// Drivers with their own rate (see PER-DRIVER HOURLY RATES) keep that rate.
+const DEFAULT_HOURLY_RATE = 62;
+const RATE_EDITABLE_FROM  = '2026-10-19'; // Monday of the week of 19 Oct 2026
+let hourlyRateSetting = DEFAULT_HOURLY_RATE; // live rate for new weeks
+
+// True when this day/city's delivery date is in the week of 19 Oct or later
+function isRateWeekEligible(s){
+  return !!(s && s.date && s.date >= RATE_EDITABLE_FROM);
+}
+// True when the Rate box can be edited (eligible week + current week view)
+function isRateEditable(s){
+  return isRateWeekEligible(s) && viewingArchiveIndex < 0;
+}
+// The $/hr to use for a day/city (before fixed-rate driver overrides)
+function getHourlyRate(s){
+  if(!isRateWeekEligible(s)) return (s && s._rate) || DEFAULT_HOURLY_RATE; // original rule, untouched
+  if(s && typeof s._rate === 'number' && s._rate > 0) return s._rate;       // rate saved with this week
+  return hourlyRateSetting;                                                 // live rate for new weeks
+}
+
+// Called from the Rate / hr box (on change, not on every keystroke)
+function setHourlyRate(day, city, value){
+  const s = state[day][city];
+  const input = document.getElementById('rate-'+day+'-'+city);
+  const current = getHourlyRate(s);
+  if(!isRateEditable(s)){
+    if(input) input.value = current;
+    alert('The hourly rate can only be changed for the week of 19 Oct 2026 onwards, on the current week. Previous weeks stay at their original rate.');
+    return;
+  }
+  const v = Math.round(parseFloat(value)*100)/100;
+  if(isNaN(v) || v <= 0){ if(input) input.value = current; alert('Please enter a valid hourly rate.'); return; }
+  if(v === current) return;
+  if(!confirm('Change the hourly rate from $'+current+' to $'+v+'?\n\n'
+    + '• Applies to ALL days and cities of the current week\n'
+    + '• Becomes the default rate for every new week after this\n'
+    + '• Weeks before 19 Oct 2026 and already-saved older weeks are NOT changed\n'
+    + '• Drivers with their own rate (e.g. PegahTwo / MatiasTwo) keep their own rate')){
+    if(input) input.value = current;
+    return;
+  }
+  hourlyRateSetting = v;
+  saveHourlyRateToFirebase();
+  ALL_DAYS.forEach(dy=>{
+    DAY_CITIES[dy].forEach(c=>{
+      const st = state[dy][c];
+      if(isRateWeekEligible(st)) st._rate = v;
+    });
+  });
+  ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{ if(state[dy][c].estLoaded) recomputeAll(dy,c); }); });
+  buildMain();
+  setTimeout(()=>{ ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{ if(state[dy][c].estLoaded) recomputeAll(dy,c); }); }); autoSaveSession(); }, 50);
+}
+
+async function saveHourlyRateToFirebase(){
+  try {
+    const payload = { rate: hourlyRateSetting, updatedAt: new Date().toISOString() };
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'hourlyRate'), payload);
+    }
+    localStorage.setItem('funkyHourlyRate', JSON.stringify(payload));
+  } catch(e){ console.error('Could not save hourly rate:', e); }
+}
+
+async function loadHourlyRateFromFirebase(){
+  const apply = d => { if(d && typeof d.rate === 'number' && d.rate > 0) hourlyRateSetting = d.rate; };
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'hourlyRate'));
+      if(snap.exists()){ apply(snap.data()); return; }
+    }
+  } catch(e){ console.error('Firebase load error (hourlyRate):', e); }
+  try {
+    const saved = localStorage.getItem('funkyHourlyRate');
+    if(saved) apply(JSON.parse(saved));
+  } catch(e){}
+}
+
+// ── PER-DRIVER HOURLY RATES (EDITABLE FROM WEEK OF 19 OCT 2026) ──────────────
+// Any driver can have their own $/hr instead of the week's default rate.
+// This replaces the hard-coded Sydney PegahTwo / MatiasTwo $57 (they start
+// with $57 as their own rate, and it can now be changed or removed too).
+// Same rules as the default rate:
+//   • Weeks before 19 Oct 2026 keep the original logic exactly
+//     (getFixedRate → $57 for those two, otherwise s._rate || 62).
+//   • A change applies to that driver on every day of the current week for
+//     that city, and to every new week after it (saved to Firebase).
+//   • Each week stores the rate each driver used (d._rateOv), so saved weeks
+//     keep their rates forever and can't be changed from the archive view.
+const DEFAULT_DRIVER_RATES = { Sydney: { PegahTwo: 57, MatiasTwo: 57 } };
+let driverRateSetting = JSON.parse(JSON.stringify(DEFAULT_DRIVER_RATES)); // live: [city][name] = rate
+
+function liveDriverRate(city, name){
+  const v = driverRateSetting[city] && driverRateSetting[city][name];
+  return (typeof v === 'number' && v > 0) ? v : null;
+}
+// The driver's own rate for this day/city, or null if they use the week rate
+function getDriverOwnRate(day, city, name){
+  const s = state[day][city], d = s && s.drivers && s.drivers[name];
+  if(!isRateWeekEligible(s)) return getFixedRate(city, name);            // original rule, untouched
+  if(isRateEditable(s)) return liveDriverRate(city, name);               // current week: live setting
+  if(d && Object.prototype.hasOwnProperty.call(d, '_rateOv')) return d._rateOv; // saved week: frozen
+  return getFixedRate(city, name);
+}
+// The $/hr actually used for this driver on this day/city
+function getDriverRate(day, city, name){
+  const own = getDriverOwnRate(day, city, name);
+  return (own !== null && own !== undefined) ? own : getHourlyRate(state[day][city]);
+}
+
+// Called from a driver's Rate / hr box. Blank = go back to the week rate.
+function setDriverRate(day, city, name, value){
+  const s = state[day][city];
+  const input = document.getElementById(`${day}-${city}_${name}_rate`);
+  const current = getDriverRate(day, city, name);
+  const weekRate = getHourlyRate(s);
+  if(!isRateEditable(s)){
+    if(input) input.value = current;
+    alert('Rates can only be changed for the week of 19 Oct 2026 onwards, on the current week. Previous weeks stay at their original rate.');
+    return;
+  }
+  const blank = String(value).trim()==='';
+  const v = blank ? weekRate : Math.round(parseFloat(value)*100)/100;
+  if(!blank && (isNaN(v) || v <= 0)){ if(input) input.value = current; alert('Please enter a valid hourly rate.'); return; }
+  const useWeek = blank || v === weekRate;
+  if(v === current && (useWeek ? liveDriverRate(city,name)===null : liveDriverRate(city,name)===v)){ if(input) input.value = current; return; }
+  const msg = useWeek
+    ? 'Set '+name+' ('+city+') back to the default rate of $'+weekRate+'/hr?'
+    : 'Set '+name+' ('+city+') to their own rate of $'+v+'/hr (instead of $'+current+')?';
+  if(!confirm(msg+'\n\n'
+    + '• Applies to '+name+' on every '+city+' day of the current week\n'
+    + '• Stays for '+name+' in every new week after this\n'
+    + '• Weeks before 19 Oct 2026 and already-saved older weeks are NOT changed')){
+    if(input) input.value = current;
+    return;
+  }
+  if(!driverRateSetting[city]) driverRateSetting[city] = {};
+  if(useWeek) delete driverRateSetting[city][name];
+  else driverRateSetting[city][name] = v;
+  saveDriverRatesToFirebase();
+  ALL_DAYS.forEach(dy=>{ if(DAY_CITIES[dy].includes(city) && state[dy][city].estLoaded) recomputeAll(dy,city); });
+  buildMain();
+  setTimeout(()=>{ ALL_DAYS.forEach(dy=>{ if(DAY_CITIES[dy].includes(city) && state[dy][city].estLoaded) recomputeAll(dy,city); }); autoSaveSession(); }, 50);
+}
+
+async function saveDriverRatesToFirebase(){
+  try {
+    const payload = { rates: JSON.parse(JSON.stringify(driverRateSetting)), updatedAt: new Date().toISOString() };
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'driverHourlyRates'), payload);
+    }
+    localStorage.setItem('funkyDriverHourlyRates', JSON.stringify(payload));
+  } catch(e){ console.error('Could not save driver rates:', e); }
+}
+
+async function loadDriverRatesFromFirebase(){
+  const apply = d => { if(d && d.rates && typeof d.rates === 'object') driverRateSetting = JSON.parse(JSON.stringify(d.rates)); };
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'driverHourlyRates'));
+      if(snap.exists()){ apply(snap.data()); return; }
+    }
+  } catch(e){ console.error('Firebase load error (driverHourlyRates):', e); }
+  try {
+    const saved = localStorage.getItem('funkyDriverHourlyRates');
+    if(saved) apply(JSON.parse(saved));
+  } catch(e){}
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── FIXED BONUS LABEL ────────────────────────────────────────────────────────
 function getFixedRate(city, name){
   if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) return 57;
@@ -1667,17 +1867,33 @@ function compute(day,city,name){
   const d=state[day][city].drivers[name]; if(!d)return;
   const key=`${day}-${city}`;
   const s=state[day][city];
-  let rate  = parseFloat(document.getElementById('rate-'+key)?.value)  || s._rate  || 62;
+  let rate  = getHourlyRate(s);
+  // Stamp the rate onto eligible current weeks so it's saved with the week
+  // and frozen once archived (older weeks are never stamped).
+  if(isRateEditable(s) && s._rate !== rate) s._rate = rate;
   const pbMin = parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5;
   // ── FIXED RATE OVERRIDES ──────────────────────────────────────────────────
-  if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) rate = 57;
+  if(!isRateWeekEligible(s)){
+    // Weeks before 19 Oct 2026 — original rule, unchanged
+    if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) rate = 57;
+  } else {
+    const own = getDriverOwnRate(day, city, name);
+    if(isRateEditable(s)) d._rateOv = (own !== null && own !== undefined) ? own : null; // save with the week
+    if(own !== null && own !== undefined) rate = own;
+  }
   // ─────────────────────────────────────────────────────────────────────────
   const estBoxes = d.stops;
-  const adj      = parseFloat(document.getElementById(`${key}_${name}_adj`)?.value)||0;
-  const actBoxes = parseFloat(document.getElementById(`${key}_${name}_actBoxes`)?.value)||estBoxes;
-  const bonus    = parseFloat(document.getElementById(`${key}_${name}_bonus`)?.value)||0;
-  const actFirst = document.getElementById(`${key}_${name}_actFirst`)?.value||'';
-  const actLast  = document.getElementById(`${key}_${name}_actLast`)?.value||'';
+  // Read from the on-screen fields when this day/city is displayed; when it
+  // isn't (e.g. recomputing the whole week), use the values already saved on
+  // the driver — the same values those fields would show — instead of
+  // blanking them.
+  const prev = d._c||{};
+  const fld = (suffix, fallback) => { const el=document.getElementById(`${key}_${name}_${suffix}`); return el ? el.value : fallback; };
+  const adj      = parseFloat(fld('adj', prev.adj||0))||0;
+  const actBoxes = parseFloat(fld('actBoxes', prev.actBoxes||estBoxes))||estBoxes;
+  const bonus    = parseFloat(fld('bonus', prev.bonus||0))||0;
+  const actFirst = fld('actFirst', prev._actFirst||'')||'';
+  const actLast  = fld('actLast', prev._actLast||'')||'';
 
   const estHrs    = mD(d.depotStart,d.depotEnd)||0;
   const estPay    = rate*estHrs;
@@ -1878,7 +2094,7 @@ function renderWeekly(){
     active.forEach(city=>{
       const s=state[day][city], cfg=CITY_CFG[city], drivers=s.drivers;
       const date=s.date||'';
-      const rate=s._rate||62;
+      const rate=getHourlyRate(s);
       let totBoxes=0,totEst=0,totFinal=0, rows='';
 
       for(const name in drivers){
@@ -1903,7 +2119,7 @@ function renderWeekly(){
 
         rows+=`<tr>
           <td style="font-family:'Sora',sans-serif;color:#1b1c1e">${name}</td>
-          <td>${fmtMoney(rate)}</td>
+          <td>${fmtMoney(isRateWeekEligible(s) ? getDriverRate(day,city,name) : rate)}</td>
           <td>${estBoxes}</td>
           <td>${adj||'—'}</td>
           <td>${actBoxes}</td>
@@ -3466,6 +3682,8 @@ window._onFirebaseReady = async function(){
   await loadFuelCompEnabledFromFirebase();
   await loadFuelPricingFromFirebase();
   await loadFoodReliefEnabledFromFirebase();
+  await loadHourlyRateFromFirebase();
+  await loadDriverRatesFromFirebase();
   // Then load session — but DON'T let it call loadArchiveFromFirebase again
   await autoLoadSession();
   // Refresh nav now that everything is loaded
