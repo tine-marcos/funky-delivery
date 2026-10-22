@@ -177,6 +177,24 @@
   .result-item { display: flex; flex-direction: column; gap: 2px; }
   .r-label { font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.5px; color: #5a5a5a; }
   .r-val { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: #1b1c1e; }
+  /* ── compact drivers table ── */
+  .dt-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; margin-bottom: 14px; }
+  .drv-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1180px; }
+  .drv-table th { position: sticky; top: 0; background: #faf8f3; text-align: left; font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); padding: 8px 7px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .drv-table td { padding: 6px 7px; border-bottom: 1px solid #f0ece2; font-family: 'DM Mono', monospace; white-space: nowrap; vertical-align: middle; }
+  .drv-table tbody tr:hover { background: #fbfaf6; }
+  .drv-table tfoot td { font-weight: 600; background: #faf8f3; border-top: 1.5px solid var(--border); border-bottom: none; }
+  .drv-table .dt-name { font-family: 'Sora', sans-serif; font-weight: 600; color: #1b1c1e; }
+  .drv-table .dt-sub { font-weight: 400; font-size: 10.5px; color: var(--text-muted); }
+  .drv-table .dt-in { width: 72px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; }
+  .drv-table .dt-in.narrow { width: 52px; }
+  .drv-table .dt-fixed { font-size: 10px; color: #569556; margin-bottom: 3px; white-space: normal; max-width: 170px; }
+  .drv-table .dt-pay { font-weight: 600; }
+  .config-row.slim { margin-bottom: 12px; }
+  .city-body .status-banner { padding: 8px 12px; margin-bottom: 8px; font-size: 12px; }
+  .config-row.slim .config-card { padding: 8px 12px; }
+  .config-row.slim .config-card label { margin-bottom: 3px; }
+  .config-row.slim input { padding: 6px 8px !important; }
   .r-val.warn { color: #e07a2f; } .r-val.bad { color: #c0392b !important; font-weight: 400; } .r-val.ok { color: #569556; }
 
   /* ── CITY SUMMARY ── */
@@ -820,7 +838,7 @@ function computeCityNetPay(city){
 
   // Food relief deduction (city-wide), same formula as renderWeekly
   let cityFRDeduction = 0;
-  if(foodReliefEnabled){
+  if(frOn()){
     ALL_DAYS.forEach(day=>{
       if(!DAY_CITIES[day].includes(city)) return;
       const frKey = `${day}-${city}`;
@@ -830,7 +848,7 @@ function computeCityNetPay(city){
         const cv = drivers[name]._c||{};
         const finalPerBox = cv.finalPerBox||0;
         const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
-        if(foodBoxes>0) cityFRDeduction += (finalPerBox-5.50)*foodBoxes*-1;
+        if(foodBoxes>0) cityFRDeduction += (finalPerBox-frRateFor(day,city))*foodBoxes*-1;
       }
     });
   }
@@ -850,6 +868,12 @@ async function saveCurrentWeek(){
   // check if there's any data to save
   const hasData = ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
   if(!hasData){ alert('No data loaded yet! Please upload CSVs before saving.'); return; }
+  // Warnings check before saving
+  const warns = weekWarnings().filter(w=>w.level!=='low');
+  if(warns.length){
+    const lines = warns.slice(0,12).map(w=>'• '+w.city+' '+w.day+(w.driver?' — '+w.driver:'')+': '+w.msg);
+    if(!confirm('⚠️ '+warns.length+' warning(s) for this week:\n\n'+lines.join('\n')+(warns.length>12?'\n…and '+(warns.length-12)+' more (see Weekly Summary)':'')+'\n\nSave anyway?')) return;
+  }
 
   // Stable ID derived from the Tuesday date — so re-saving the SAME week overwrites
   // (instead of creating a new doc each time). Falls back to label if no Tuesday date.
@@ -860,9 +884,17 @@ async function saveCurrentWeek(){
 
   // Check if a week with this label/id already exists in archive
   const existingIdx = weekArchive.findIndex(w => (w._id===stableId) || (w.label===label));
+  // Re-saving a saved week while viewing it: keep its original save time
+  // (so it doesn't jump to "most recent") and its frozen fuel prices / fuel
+  // on-off (so they aren't replaced with today's values).
+  const resavingViewed = viewingArchiveIndex >= 0 && existingIdx >= 0;
+  const prevSnap = resavingViewed ? weekArchive[existingIdx] : null;
   if(existingIdx >= 0){
-    if(!confirm('"'+label+'" is already saved. Overwrite with the latest data?')) return;
+    if(!confirm(resavingViewed
+      ? 'Re-save the saved week "'+label+'" with the changes made on it?\n\nIts place in the week list and its fuel prices stay as they were.'
+      : '"'+label+'" is already saved. Overwrite with the latest data?')) return;
   } else {
+    if(viewingArchiveIndex >= 0){ alert('You\'re viewing a saved week. Go back to CURRENT (›) to save the current week.'); return; }
     if(!confirm('Save "'+label+'" to archive? You can still view it later.')) return;
   }
 
@@ -899,6 +931,11 @@ async function saveCurrentWeek(){
     // for older weeks.
     fuelCompEnabled: fuelCompEnabled,
   };
+  if(prevSnap){
+    if(prevSnap.savedAt) snapshot.savedAt = prevSnap.savedAt;
+    ['fuelRates','fuelBaseRates','fuelCompEnabled'].forEach(k=>{ if(prevSnap[k]!==undefined) snapshot[k]=JSON.parse(JSON.stringify(prevSnap[k])); });
+    snapshot.resavedAt = new Date().toISOString();
+  }
 
   // Save to Firebase + localStorage backup
   try {
@@ -939,6 +976,7 @@ async function saveCurrentWeek(){
         }
       } catch(e){ console.warn('Duplicate cleanup skipped:', e); }
     }
+    logChange(resavingViewed?'Saved week re-saved':'Week saved', label);
     alert('✅ Week saved! Synced across all browsers and devices.');
     updateWeekNav();
   } catch(e) {
@@ -1110,7 +1148,8 @@ function renderPayPreview(){
 
     // fixed bonus label
     let bonusLabel = '';
-    if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
+    if(isRateWeekEligible(s)){ const fx=fixedRulesFor(previewDay,previewCity,name); bonusLabel = fx.short.join(' + ') + (fx.short.length&&bonus?' + extra':''); }
+    else if(name==='Lakmal'&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Weekly bonus';
     else if(isBneFriFixed8(name)&&previewCity==='Brisbane'&&previewDay==='Friday') bonusLabel='Fixed $8/box';
     else if(previewCity==='Sydney') bonusLabel = bonus ? 'Gate fee + extra' : 'Gate fee';
 
@@ -1171,30 +1210,31 @@ function renderPayPreview(){
 function buildTabs() {
   const bar = document.getElementById('tabsBar');
   bar.innerHTML = '';
-  ALL_DAYS.forEach(day => {
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn' + (day === activeTab ? ' active' : '');
-    btn.id = 'tab-' + day;
-    btn.onclick = () => switchTab(day);
-    const dots = DAY_CITIES[day].map(c => `<span class="tab-dot ${CITY_CFG[c].cls}${state[day][c].estLoaded?' loaded':''}" id="dot-${day}-${c}"></span>`).join('');
-    btn.innerHTML = `<div class="tab-dots">${dots}</div>${day}`;
-    bar.appendChild(btn);
-  });
+  // One "Import" tab replaces the five day tabs — days & cities are picked
+  // from the grid inside it.
+  const imp = document.createElement('button');
+  imp.className = 'tab-btn' + (ALL_DAYS.includes(activeTab) ? ' active' : '');
+  imp.id = 'tab-Import';
+  imp.onclick = () => switchTab(ALL_DAYS.includes(activeTab) ? activeTab : (window._lastImportDay || 'Tuesday'));
+  imp.innerHTML = '📥&nbsp; Import';
+  bar.appendChild(imp);
   const w = document.createElement('button');
   w.className = 'tab-btn weekly-tab' + (activeTab==='Weekly'?' active':'');
   w.id = 'tab-Weekly'; w.onclick = () => switchTab('Weekly');
   w.innerHTML = '⚡️&nbsp; Weekly Summary';
   bar.appendChild(w);
+  const vsTabs = viewedEligibleState();
+  const showFR = !vsTabs || weekFoodReliefOn(vsTabs), showFuel = !vsTabs || weekFuelOn(vsTabs);
   const fr = document.createElement('button');
   fr.className = 'tab-btn right-group' + (activeTab==='FoodRelief'?' active':'');
   fr.id = 'tab-FoodRelief'; fr.onclick = () => switchTab('FoodRelief');
   fr.innerHTML = '📦&nbsp; Food Relief';
-  bar.appendChild(fr);
+  if(showFR) bar.appendChild(fr);
   const fu = document.createElement('button');
   fu.className = 'tab-btn right-group' + (activeTab==='Fuel'?' active':'');
   fu.id = 'tab-Fuel'; fu.onclick = () => switchTab('Fuel');
   fu.innerHTML = '⛽&nbsp; Fuel';
-  bar.appendChild(fu);
+  if(showFuel) bar.appendChild(fu);
   const inv = document.createElement('button');
   inv.className = 'tab-btn right-group' + (activeTab==='Invoice'?' active':'');
   inv.id = 'tab-Invoice'; inv.onclick = () => switchTab('Invoice');
@@ -1205,6 +1245,11 @@ function buildTabs() {
   prev.id = 'tab-Preview'; prev.onclick = () => switchTab('Preview');
   prev.innerHTML = '📋&nbsp; Pay Preview';
   bar.appendChild(prev);
+  const st = document.createElement('button');
+  st.className = 'tab-btn right-group' + (activeTab==='Settings'?' active':'');
+  st.id = 'tab-Settings'; st.onclick = () => switchTab('Settings');
+  st.innerHTML = '⚙️&nbsp; Settings';
+  bar.appendChild(st);
 }
 
 function updateDot(day, city) {
@@ -1213,16 +1258,225 @@ function updateDot(day, city) {
   dot.className = `tab-dot ${CITY_CFG[city].cls}${state[day][city].estLoaded?' loaded':''}`;
 }
 
-function switchTab(tab) { activeTab = tab; buildTabs(); buildMain(); }
+function switchTab(tab) { if(ALL_DAYS.includes(tab)) window._lastImportDay = tab; activeTab = tab; buildTabs(); buildMain(); }
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
+
+// ── 📦 UPLOAD ALL CSVs AT ONCE ────────────────────────────────────────────────
+// Drop every Routific CSV for the week in one go. For each file the tool works
+// out:
+//   • CITY from the depot address state (QLD = Brisbane, NSW = Sydney,
+//     VIC = Melbourne). The route/file name (BNE/SYD/MEL…) is a cross-check —
+//     if the two disagree, the file is NOT loaded until you choose.
+//   • DAY from the date in the file ("Scheduled date", or the date in the
+//     file name), cross-checked with the day in the route name.
+//   • ESTIMATED vs ACTUALS from whether any actual delivery times are filled.
+// A preview shows where every file will go BEFORE anything is loaded. Files
+// load through the normal upload logic (first CSV = source of truth, extra
+// CSVs only add new drivers), Estimated before Actuals.
+const STATE_TO_CITY = { QLD:'Brisbane', NSW:'Sydney', VIC:'Melbourne' };
+const NAME_TO_CITY  = [[/\b(bne|brisbane|bris)\b/i,'Brisbane'],[/\b(syd|sydney)\b/i,'Sydney'],[/\b(mel|melb|melbourne)\b/i,'Melbourne']];
+const DAY_WORDS     = [[/\b(tue|tues|tuesday)\b/i,'Tuesday'],[/\b(wed|weds|wednesday)\b/i,'Wednesday'],[/\b(thu|thur|thurs|thursday)\b/i,'Thursday'],[/\b(fri|friday)\b/i,'Friday'],[/\b(sat|saturday)\b/i,'Saturday'],[/\b(mon|monday)\b/i,'Monday'],[/\b(sun|sunday)\b/i,'Sunday']];
+const JS_DAY_NAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+let bulkItems = [];
+
+function detectCsv(fileName, text){
+  const rows = parseCSV(text.replace(/^﻿/,''));
+  const info = { fileName, text, type:null, city:null, day:null, date:null, depot:'', drivers:0, issues:[] };
+  if(!rows.length){ info.issues.push('Empty file'); return info; }
+  const h = rows[0], idx = k => h.indexOf(k), get = (r,k) => (idx(k)>=0 ? (r[idx(k)]||'') : '').trim();
+  const isNew = isNewRoutificFormat(h), isOld = h.indexOf('Driver Name')>=0 && h.indexOf('Stop Number')>=0;
+  if(!isNew && !isOld){ info.issues.push('Not a Routific solution CSV'); return info; }
+  const body = rows.slice(1);
+  const isDepot = r => isNew ? /DEPOT --$/.test(get(r,'Customer name')) : ['0','999'].includes(get(r,'Stop Number'));
+  // Type
+  const hasActual = isNew
+    ? body.some(r=>!isDepot(r) && (get(r,'Actual arrival time')||get(r,'Actual departure time')||get(r,'Delivery attempt time')||get(r,'Delivery status')))
+    : body.some(r=>!isDepot(r) && (get(r,'Stop Status')||get(r,'Completion/skipped Time')));
+  info.type = hasActual ? 'act' : 'est';
+  // City from depot addresses (state code), cross-checked with names
+  const depots = body.filter(isDepot).map(r=>get(r,'Address')).filter(Boolean);
+  const addrs = depots.length ? depots : body.map(r=>get(r,'Address')).filter(Boolean);
+  info.depot = depots[0] || '';
+  const votes = {};
+  addrs.forEach(a=>{ const m = a.match(/\b(QLD|NSW|VIC)\b/); if(m) votes[STATE_TO_CITY[m[1]]] = (votes[STATE_TO_CITY[m[1]]]||0)+1; });
+  const addrCities = Object.keys(votes);
+  const addrCity = addrCities.sort((a,b)=>votes[b]-votes[a])[0] || null;
+  const nameText = fileName+' '+[...new Set(body.map(r=>get(r,'Route name')))].join(' ');
+  const nameCity = (NAME_TO_CITY.find(([re])=>re.test(nameText))||[])[1] || null;
+  if(addrCities.length > 1 && depots.length) info.issues.push('Depot addresses are in more than one state ('+addrCities.join(', ')+')');
+  if(addrCity && nameCity && addrCity!==nameCity) info.issues.push('Depot address says '+addrCity+' but the name says '+nameCity+' — please choose');
+  else info.city = addrCity || nameCity;
+  if(!info.city && !info.issues.length) info.issues.push('Couldn\'t tell the city — please choose');
+  // Date / day
+  const sched = isNew ? (body.map(r=>get(r,'Scheduled date')).find(Boolean)||'') : '';
+  let date = /^\d{4}-\d{2}-\d{2}$/.test(sched) ? sched : null;
+  if(!date){ const m = fileName.match(/(\d{2})-(\d{2})-(\d{4})/); if(m) date = m[3]+'-'+m[1]+'-'+m[2]; }   // 10-20-2026
+  if(!date){ const m = fileName.match(/(\d{4})-(\d{2})-(\d{2})/); if(m) date = m[1]+'-'+m[2]+'-'+m[3]; }   // 2026-10-20
+  const wordDay = (DAY_WORDS.find(([re])=>re.test(nameText))||[])[1] || null;
+  const dateDay = date ? JS_DAY_NAMES[new Date(date+'T12:00:00').getDay()] : null;
+  info.date = date;
+  if(dateDay && wordDay && dateDay!==wordDay) info.issues.push('Date is a '+dateDay+' but the name says '+wordDay+' — please choose');
+  else info.day = dateDay || wordDay;
+  if(!info.day && !info.issues.some(i=>/choose/.test(i))) info.issues.push('Couldn\'t tell the day — please choose');
+  if(info.day && !ALL_DAYS.includes(info.day)){ info.issues.push(info.day+' isn\'t a delivery day in the tool'); info.day = null; }
+  if(info.day && info.city && !DAY_CITIES[info.day].includes(info.city)){ info.issues.push(info.city+' doesn\'t deliver on '+info.day); }
+  // Drivers
+  try { let rr = rows; if(isNew) rr = normalizeNewRoutific(rows, info.type).rows; info.drivers = Object.keys(parseEstRows(rr)).length; } catch(e){}
+  return info;
+}
+
+// Problems that stop a row loading until it's fixed (or skipped)
+function bulkRowProblems(it){
+  const p = [];
+  if(it.skip) return p;
+  if(!it.type) p.push('Not a Routific CSV');
+  if(!it.city) p.push('Choose a city');
+  if(!it.day) p.push('Choose a day');
+  if(it.city && it.day && !DAY_CITIES[it.day].includes(it.city)) p.push(it.city+' doesn\'t deliver on '+it.day);
+  if(it.city && it.day && DAY_CITIES[it.day].includes(it.city) && it.date && state[it.day][it.city].date !== it.date)
+    p.push('File is for '+auDate(it.date)+' but this week\'s '+it.day+' is '+auDate(state[it.day][it.city].date));
+  return p;
+}
+
+async function onBulkFiles(fileList){
+  const files = [...fileList].filter(f=>/\.csv$/i.test(f.name));
+  if(!files.length){ alert('Please choose Routific .csv files.'); return; }
+  bulkItems = [];
+  for(const f of files){
+    const text = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsText(f); });
+    const it = detectCsv(f.name, text);
+    it.chosen = !it.issues.length; // auto-detected cleanly
+    bulkItems.push(it);
+  }
+  renderBulkPreview();
+}
+
+function renderBulkPreview(){
+  let ov = document.getElementById('bulkOverlay');
+  if(!ov){ ov = document.createElement('div'); ov.id='bulkOverlay'; document.body.appendChild(ov); }
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(27,28,30,.45);z-index:9000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 16px';
+  const sel = (i, field, val, opts) => `<select onchange="bulkItems[${i}].${field}=this.value||null;bulkItems[${i}].skip=false;renderBulkPreview()" style="padding:5px 7px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Sora,sans-serif">
+      ${val?'':'<option value="">— choose —</option>'}${opts.map(o=>`<option value="${o[0]}"${o[0]===val?' selected':''}>${o[1]}</option>`).join('')}</select>`;
+  // Offer to set the week's dates if every dated file is from one other week and the current week is empty
+  const dates = bulkItems.map(i=>i.date).filter(Boolean);
+  const tues = [...new Set(dates.map(d=>{ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()-((x.getDay()-2+7)%7)); return x.toISOString().slice(0,10); }))];
+  const curTue = state.Tuesday[CITIES[0]].date;
+  const weekEmpty = !ALL_DAYS.some(d=>DAY_CITIES[d].some(c=>state[d][c].estLoaded));
+  const offerWeek = tues.length===1 && tues[0]!==curTue && viewingArchiveIndex<0 && weekEmpty;
+  const rows = bulkItems.map((it,i)=>{
+    const probs = bulkRowProblems(it);
+    const status = it.skip ? '<span style="color:var(--text-muted)">Skipped</span>'
+      : probs.length ? `<span style="color:#c0392b">⚠️ ${probs.join('<br>⚠️ ')}</span>`
+      : `<span style="color:#569556">✅ Ready${state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] && isRateWeekEligible(state[it.day][it.city]) ? ' — will be added as an extra CSV' : (state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] ? ' — will REPLACE the loaded CSV' : '')}</span>`;
+    const notes = it.issues.filter(x=>!probs.includes(x)).map(x=>`<div style="color:#b9770e;font-size:11px">${x}</div>`).join('');
+    return `<tr style="border-top:1px solid #eee;${it.skip?'opacity:.5':''}">
+      <td style="padding:8px;font-size:11px;max-width:230px;word-break:break-all">${it.fileName}<div style="color:var(--text-muted);font-size:10px">${it.depot||''}</div>${notes}</td>
+      <td style="padding:8px">${sel(i,'type',it.type,[['est','Estimated'],['act','Actuals']])}</td>
+      <td style="padding:8px">${sel(i,'city',it.city,CITIES.map(c=>[c,c]))}</td>
+      <td style="padding:8px">${sel(i,'day',it.day,ALL_DAYS.map(d=>[d,d]))}<div style="font-size:10px;color:var(--text-muted)">${it.date?auDate(it.date):'no date in file'}</div></td>
+      <td style="padding:8px;font-size:12px;text-align:center">${it.drivers}</td>
+      <td style="padding:8px;font-size:12px">${status}</td>
+      <td style="padding:8px"><button class="clear-btn" style="padding:5px 9px" onclick="bulkItems[${i}].skip=!bulkItems[${i}].skip;renderBulkPreview()">${it.skip?'Include':'Skip'}</button></td></tr>`;
+  }).join('');
+  const ready = bulkItems.filter(it=>!it.skip && !bulkRowProblems(it).length);
+  const blocked = bulkItems.filter(it=>!it.skip && bulkRowProblems(it).length);
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:1080px;width:100%;padding:22px 24px;font-family:Sora,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;font-size:16px">📦 Check where each CSV goes</div>
+      <button class="clear-btn" onclick="document.getElementById('bulkOverlay').remove()">✕ Cancel</button></div>
+    <div style="font-size:12px;color:var(--text-muted);margin:6px 0 12px">Loading into <strong>${viewedWeekLabel()}</strong>. City comes from the depot address, day from the date in the file. Nothing is loaded until you click Load.</div>
+    ${offerWeek?`<div class="status-banner error" style="margin-bottom:12px"><span>📅</span><span>These files are for the week of <strong>${getWeekLabel(tues[0])}</strong>, but this week is set to ${getWeekLabel(curTue)}. <button class="export-btn" style="margin-left:8px;padding:6px 12px" onclick="setTuesdayDate('${CITIES[0]}','${tues[0]}');renderBulkPreview()">Set this week to ${getWeekLabel(tues[0])}</button></span></div>`:''}
+    <div style="overflow:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:11px;color:var(--text-muted);text-transform:uppercase;text-align:left"><th style="padding:6px 8px">File</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">City</th><th style="padding:6px 8px">Day</th><th style="padding:6px 8px">Drivers</th><th style="padding:6px 8px">Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px">
+      <button class="export-btn" ${ready.length&&!blocked.length?'':'disabled style="opacity:.5"'} onclick="applyBulk()">⬆ Load ${ready.length} CSV(s)</button>
+      ${blocked.length?`<span style="font-size:12px;color:#c0392b">Fix or skip the ${blocked.length} file(s) marked ⚠️ first.</span>`:''}
+    </div></div>`;
+}
+
+// Waits until a loader has finished (each loader writes one change-log entry)
+function waitForLoad(prevLen){
+  return new Promise(res=>{ const t0=Date.now(); const tick=()=>{ if(changeLog.length>prevLen || Date.now()-t0>4000) setTimeout(res,250); else setTimeout(tick,40); }; tick(); });
+}
+async function applyBulk(){
+  const items = bulkItems.filter(it=>!it.skip && !bulkRowProblems(it).length);
+  if(!items.length) return;
+  const ov = document.getElementById('bulkOverlay'); if(ov) ov.remove();
+  // Estimated first, then Actuals; keep file order within each
+  const ordered = items.filter(i=>i.type==='est').concat(items.filter(i=>i.type==='act'));
+  for(const it of ordered){
+    const f = new File([it.text], it.fileName, {type:'text/csv'});
+    const before = changeLog.length;
+    if(it.type==='est') loadEst(it.day, it.city, f); else loadAct(it.day, it.city, f);
+    await waitForLoad(before);
+  }
+  logChange('Uploaded all CSVs at once', ordered.map(i=>(i.type==='est'?'Est':'Act')+' '+i.city+' '+i.day+': '+i.fileName).join(' | '));
+  bulkItems = [];
+  buildTabs(); buildMain();
+  alert('✅ Loaded '+ordered.length+' CSV(s). Check the Weekly Summary for warnings.');
+}
+function buildBulkUploadBar(){
+  const bar = document.createElement('div');
+  bar.id = 'bulkBar';
+  bar.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1.5px dashed var(--border);border-radius:12px;padding:10px 14px;margin-bottom:14px;background:#fff;font-family:Sora,sans-serif;font-size:12px;color:var(--text-muted)';
+  bar.innerHTML = `<span style="font-size:18px">📦</span><span><strong style="color:#1b1c1e">Upload all CSVs at once</strong> — drop every Routific CSV for the week here. You'll see where each one goes before anything loads.</span>
+    <input type="file" id="bulkInput" accept=".csv" multiple style="display:none" onchange="onBulkFiles(this.files);this.value=''">
+    <button class="upload-btn" style="margin-left:auto" onclick="document.getElementById('bulkInput').click()">Choose CSVs</button>`;
+  bar.addEventListener('dragover', e=>{ e.preventDefault(); bar.style.borderColor='var(--olive)'; });
+  bar.addEventListener('dragleave', ()=>{ bar.style.borderColor='var(--border)'; });
+  bar.addEventListener('drop', e=>{ e.preventDefault(); bar.style.borderColor='var(--border)'; onBulkFiles(e.dataTransfer.files); });
+  return bar;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 📥 IMPORT GRID ────────────────────────────────────────────────────────────
+// Days down the side, cities across. Each cell shows that day/city's status;
+// click a cell to open it underneath.
+function cellWarnCount(day, city){
+  try { return weekWarnings().filter(w=>w.day===day && w.city===city && w.level!=='low').length; } catch(e){ return 0; }
+}
+function buildImportGrid(selDay, selCity){
+  const head = CITIES.map(c=>`<th style="padding:8px 10px;text-align:center;font-size:12px;font-weight:600">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--${CITY_CFG[c].cls});margin-right:6px"></span>${c}</th>`).join('');
+  const rows = ALL_DAYS.map(day=>{
+    const anyDate = (state[day][DAY_CITIES[day][0]]||{}).date;
+    const cells = CITIES.map(c=>{
+      if(!DAY_CITIES[day].includes(c)) return `<td style="padding:6px;text-align:center;color:#c8c2b4;font-size:12px">—</td>`;
+      const s = state[day][c], sel = day===selDay && c===selCity;
+      const n = Object.keys(s.drivers||{}).length;
+      const warn = s.estLoaded ? cellWarnCount(day,c) : 0;
+      let icon, text, bg;
+      if(!s.estLoaded){ icon='＋'; text='Empty'; bg='#faf8f3'; }
+      else if(!s.actLoaded){ icon='📋'; text=n+' drivers · no actuals'; bg='#fff8ec'; }
+      else { icon='✅'; text=n+' drivers'; bg='#eef7ee'; }
+      if(warn) { icon='⚠️'; text += ' · '+warn+' warning'+(warn>1?'s':''); bg='#fff1f1'; }
+      return `<td style="padding:4px"><button onclick="activeTab='${day}';activeCity['${day}']='${c}';window._lastImportDay='${day}';buildMain()"
+        style="width:100%;border-radius:9px;border:${sel?'2px solid var(--olive)':'1px solid var(--border)'};background:${bg};padding:7px 8px;cursor:pointer;font-family:Sora,sans-serif;font-size:12px;text-align:left;display:flex;gap:7px;align-items:center;${sel?'box-shadow:0 0 0 3px var(--olive-pale)':''}">
+        <span>${icon}</span><span style="color:#1b1c1e">${text}</span></button></td>`;
+    }).join('');
+    // Day label: "→ Tuesday 20/10" — clicking it opens that day (first city with data)
+    const openCity = DAY_CITIES[day].find(c=>state[day][c].estLoaded) || DAY_CITIES[day][0];
+    return `<tr><td style="padding:6px 10px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;${day===selDay?'color:var(--olive)':''}" title="Click a cell to view that day's table"
+        onclick="activeTab='${day}';activeCity['${day}']='${openCity}';window._lastImportDay='${day}';buildMain()">→ ${day}<span style="font-weight:400;color:var(--text-muted);margin-left:6px">${anyDate?auDate(anyDate).slice(0,5):''}</span></td>${cells}</tr>`;
+  }).join('');
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px 10px;margin-bottom:16px;overflow-x:auto">
+    <table style="width:100%;border-collapse:separate;border-spacing:0;min-width:520px;table-layout:fixed"><thead><tr><th style="width:150px"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildMain() {
   const main = document.getElementById('mainContent');
+  // Hidden tab (Food Relief / Fuel switched off for this week) → go to Weekly
+  const vsHide = viewedEligibleState();
+  if(vsHide && ((activeTab==='FoodRelief' && !weekFoodReliefOn(vsHide)) || (activeTab==='Fuel' && !weekFuelOn(vsHide)))) activeTab = 'Weekly';
+  try { buildTabs(); } catch(e){}
   if (activeTab === 'Weekly') { main.innerHTML = ''; renderWeekly(); return; }
   if (activeTab === 'FoodRelief') { main.innerHTML = ''; renderFoodRelief(); return; }
   if (activeTab === 'Fuel') { main.innerHTML = ''; renderFuel(); return; }
   if (activeTab === 'Invoice') { main.innerHTML = ''; renderInvoice(); return; }
   if (activeTab === 'Preview') { main.innerHTML = ''; renderPayPreview(); return; }
+  if (activeTab === 'Settings') { main.innerHTML = ''; renderSettings(); return; }
   const day = activeTab;
   const cities = DAY_CITIES[day];
 
@@ -1231,21 +1485,13 @@ function buildMain() {
   const city = activeCity[day];
 
   main.innerHTML = '';
+  window._lastImportDay = day;
+  main.appendChild(buildBulkUploadBar());
 
-  // ── City sub-tabs ──
-  const subTabsEl = document.createElement('div');
-  subTabsEl.className = 'city-subtabs';
-  cities.forEach(c => {
-    const s = state[day][c];
-    const cfg = CITY_CFG[c];
-    const btn = document.createElement('button');
-    btn.className = 'city-subtab' + (c === city ? ' active' : '');
-    const statusIcon = s.actLoaded ? '✅' : s.estLoaded ? '📋' : '';
-    btn.innerHTML = `${c} <span class="subtab-status">${statusIcon}</span>`;
-    btn.onclick = () => { activeCity[day] = c; buildMain(); };
-    subTabsEl.appendChild(btn);
-  });
-  main.appendChild(subTabsEl);
+  // ── Day × city grid (replaces the day tabs and city sub-tabs) ──
+  const gridEl = document.createElement('div');
+  gridEl.innerHTML = buildImportGrid(day, city);
+  main.appendChild(gridEl.firstElementChild);
 
   // ── Active city section ──
   const s   = state[day][city];
@@ -1257,7 +1503,7 @@ function buildMain() {
   sec.innerHTML = `
     <div class="city-header ${cfg.cls}">
       <div class="city-title">
-        ${city}
+        ${city} · ${day} <span style="font-weight:400;opacity:.85;font-size:.85em">${auDate(s.date)}</span>
         ${s.estLoaded ? `<span class="city-pill">${Object.keys(s.drivers).length} drivers · ${totalStops} stops</span>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
@@ -1309,6 +1555,14 @@ function buildActualsStatusBanner(day, city){
   if(!s.actLoaded) return ''; // nothing uploaded yet — not an error state
   const names = Object.keys(s.drivers||{});
   if(!names.length) return '';
+  const nf = (s._actNotFound||[]);
+  const nfBanner = nf.length ? `<div class="status-banner error">
+      <span style="font-size:16px">⚠️</span>
+      <span><strong>${nf.length} driver(s) in the Actuals CSV aren't in the Estimated CSV:</strong> ${nf.map(n=>'<strong>'+n+'</strong>').join(', ')}. Check the spelling in Routific, or add their Estimated CSV first.</span>
+    </div>` : '';
+  return nfBanner + buildActualsStatusBannerMain(day, city, s, names);
+}
+function buildActualsStatusBannerMain(day, city, s, names){
   const filled = names.filter(n => s.drivers[n]._c && s.drivers[n]._c._actFirst).length;
   if(filled === 0){
     return `<div class="status-banner error">
@@ -1345,34 +1599,21 @@ function buildLastAddBanner(day, city){
 function buildCityBody(day, city) {
   const s   = state[day][city];
   const key = `${day}-${city}`;
-  const cfg = CITY_CFG[city];
+  const eligible = isRateWeekEligible(s);
+  // Only problems get a banner — the "all good" messages are in the status line
+  const onlyProblems = h => h.replace(/<div class="status-banner success">[\s\S]*?<\/div>/g,'');
+  const names = Object.keys(s.drivers||{});
+  const withAct = names.filter(n=>{ const c=s.drivers[n]._c||{}; return c._actFirst; }).length;
+  const status = !s.estLoaded ? '<span style="color:var(--text-muted)">Nothing uploaded yet — use “Upload all CSVs at once” above, or add a file here.</span>'
+    : `<strong>${names.length}</strong> drivers · actuals <strong>${s.actLoaded?withAct+'/'+names.length:'not uploaded'}</strong> ${s.actLoaded&&withAct===names.length?'✅':'📋'}`
+      + (s._estFormat?` · <span style="color:var(--text-muted)">${s._estFormat==='new'?'new':'old'} Routific format</span>`:'');
   return `
-    <div class="upload-pair">
-      <div class="upload-card${s.estLoaded?' done':''}" id="upEst-${key}" onclick="document.getElementById('fEst-${key}').click()">
-        <div class="upload-icon">📋</div>
-        <h3>1. Upload Estimated CSV</h3>
-        <p>${isMultiCsvAddMode(s)?'Extra CSVs only ADD new drivers — loaded drivers stay as they are':'Routific plan — before deliveries'}</p>
-        <input type="file" id="fEst-${key}" accept=".csv" onchange="onEst('${day}','${city}',event);this.value=''">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fEst-${key}').click()">${isMultiCsvAddMode(s)?'＋ Add another Estimated CSV':'Choose Estimated CSV'}</button>
-        <div class="file-name" id="nEst-${key}">${s.estLoaded?((s._estFiles&&s._estFiles.length>1)?s._estFiles.map((f,i)=>'✓ '+(i===0?'(1st) ':'(+) ')+f).join('<br>'):'✓ '+s._estFile):''}</div>
-      </div>
-      <div class="upload-card${s.actLoaded?' done':s.estLoaded?'':' locked'}" id="upAct-${key}" onclick="document.getElementById('fAct-${key}').click()">
-        <div class="upload-icon">✅</div>
-        <h3>2. Upload Actuals CSV</h3>
-        <p>${isActAddMode(s)?'Extra CSVs only fill drivers with no actuals yet':'Completed run — after deliveries'}</p>
-        <input type="file" id="fAct-${key}" accept=".csv" onchange="onAct('${day}','${city}',event);this.value=''">
-        <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('fAct-${key}').click()">${isActAddMode(s)?'＋ Add another Actuals CSV':'Choose Actuals CSV'}</button>
-        <div class="file-name" id="nAct-${key}">${s.actLoaded?((s._actFiles&&s._actFiles.length>1)?s._actFiles.map((f,i)=>'✓ '+(i===0?'(1st) ':'(+) ')+f).join('<br>'):'✓ '+s._actFile):''}</div>
-      </div>
-    </div>
-    ${(isRateWeekEligible(s) && (s.estLoaded||s.actLoaded)) ? `
-    <div style="display:flex;justify-content:flex-end;margin:-4px 0 12px">
-      <button class="clear-btn" onclick="clearAllCsvs('${day}','${city}')" title="Remove every uploaded Estimated & Actuals CSV for ${city} on ${day} and start this day from scratch">✕ Clear all uploaded CSVs (${city} · ${day})</button>
-    </div>` : ''}
-    ${buildEstimatedStatusBanner(day,city)}
-    ${buildActualsStatusBanner(day,city)}
+    ${buildFilesRow(day, city)}
+    <div style="font-size:12px;margin:2px 0 10px">${status}</div>
+    ${onlyProblems(buildEstimatedStatusBanner(day,city))}
+    ${onlyProblems(buildActualsStatusBanner(day,city))}
     ${buildLastAddBanner(day,city)}
-    <div class="config-row">
+    <div class="config-row slim">
       <div class="config-card">
         <label>Delivery Date${day==='Tuesday'?' ✎':' (auto)'}</label>
         ${day==='Tuesday'
@@ -1381,17 +1622,170 @@ function buildCityBody(day, city) {
         }
       </div>
       <div class="config-card"><label>Rate / hr ($)${isRateEditable(s)?' ✎':' 🔒'}</label><input type="number" id="rate-${key}" value="${getHourlyRate(s)}" step="0.01" ${isRateEditable(s)?`onchange="setHourlyRate('${day}','${city}',this.value)" title="Applies to all days & cities of this week and future weeks"`:`disabled title="Weeks before 19 Oct 2026 keep their original rate"`}></div>
-      <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
+      ${eligible
+        ? `<div class="config-card"><label>Per Box Min ($) ⚙️</label><input type="number" id="pbmin-${key}" value="${getRules(s).perBoxMin}" disabled title="Change this in the ⚙️ Settings tab"></div>`
+        : `<div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>`}
     </div>
     <div id="driverArea-${key}">
-      ${s.estLoaded ? buildDriverCards(day,city) : `<div class="empty-state"><div class="emoji">🌱</div><p>Upload Estimated CSV to get started</p><small>Then upload Actuals CSV to auto-fill times</small></div>`}
+      ${s.estLoaded ? buildDriverTable(day,city) : ''}
     </div>
-    ${s.estLoaded ? buildCitySummary(day,city) : ''}
     ${s.estLoaded ? `
     <div class="actions-row">
       <button class="export-btn" onclick="exportCity('${day}','${city}')">⬇ Export ${city} CSV</button>
-      <button class="clear-btn" onclick="${isRateWeekEligible(s)?'clearAllCsvs':'clearCity'}('${day}','${city}')">✕ Clear ${city}</button>
+      <button class="clear-btn" onclick="${eligible?'clearAllCsvs':'clearCity'}('${day}','${city}')">✕ ${eligible?'Clear all CSVs':'Clear '+city}</button>
     </div>` : ''}`;
+}
+
+// ── FILES ROW ─────────────────────────────────────────────────────────────────
+// One line per uploaded CSV. From the week of 19 Oct each file has an ✕ to
+// remove just that file (see removeUpload). Older weeks: a new upload
+// replaces, as before.
+function getUploads(s, kind){
+  const listKey = kind==='est' ? '_estUploads' : '_actUploads';
+  if(Array.isArray(s[listKey])) return s[listKey];
+  // Uploads made before per-file tracking existed — rebuild the list from
+  // the file names and each driver's source file.
+  const files = kind==='est' ? (s._estFiles || (s.estLoaded&&s._estFile?[s._estFile]:[])) : (s._actFiles || (s.actLoaded&&s._actFile?[s._actFile]:[]));
+  const seen = new Set();
+  const names = Object.keys(s.drivers||{});
+  return files.map((f,i)=>{
+    let drivers;
+    if(kind==='est') drivers = i===0 ? names.filter(n=>!s.drivers[n]._estFile) : (seen.has(f) ? [] : names.filter(n=>s.drivers[n]._estFile===f));
+    else drivers = seen.has(f) ? [] : names.filter(n=>s.drivers[n]._actFile===f || (i===0 && !s.drivers[n]._actFile && s.drivers[n]._c && s.drivers[n]._c._actFirst));
+    seen.add(f);
+    return { id:'legacy'+i, name:f, drivers };
+  });
+}
+function buildFilesRow(day, city){
+  const s = state[day][city], key = `${day}-${city}`, eligible = isRateWeekEligible(s);
+  const chip = (kind, u, i, total) => `<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:6px 8px 6px 10px;font-size:12px">
+      <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;background:${kind==='est'?'#eef3fb':'#eef7ee'};color:${kind==='est'?'#3b5b8c':'#3c7a3c'}">${kind==='est'?'EST':'ACT'}</span>
+      <span style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${u.name}">${u.name}</span>
+      <span style="color:var(--text-muted);white-space:nowrap">${i===0?'1st · ':''}${u.drivers.length} driver${u.drivers.length===1?'':'s'}</span>
+      ${eligible?`<button title="Remove this file only" onclick="removeUpload('${day}','${city}','${kind}',${i})" style="border:none;background:transparent;cursor:pointer;color:#c0392b;font-size:14px;padding:0 2px">✕</button>`:''}</div>`;
+  const est = s.estLoaded ? getUploads(s,'est') : [], act = s.actLoaded ? getUploads(s,'act') : [];
+  const chips = est.map((u,i)=>chip('est',u,i,est.length)).join('') + act.map((u,i)=>chip('act',u,i,act.length)).join('');
+  const addLabel = k => eligible ? (k==='est' ? (s.estLoaded?'＋ Estimated':'＋ Estimated CSV') : (s.actLoaded?'＋ Actuals':'＋ Actuals CSV'))
+                                 : (k==='est' ? (s.estLoaded?'Replace Estimated':'＋ Estimated CSV') : (s.actLoaded?'Replace Actuals':'＋ Actuals CSV'));
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px">
+      ${chips}
+      <input type="file" id="fEst-${key}" accept=".csv" style="display:none" onchange="onEst('${day}','${city}',event);this.value=''">
+      <input type="file" id="fAct-${key}" accept=".csv" style="display:none" onchange="onAct('${day}','${city}',event);this.value=''">
+      <button class="clear-btn" style="padding:7px 11px" onclick="document.getElementById('fEst-${key}').click()" title="${eligible&&s.estLoaded?'Extra CSVs only ADD new drivers — loaded drivers stay as they are':'Routific plan — before deliveries'}">${addLabel('est')}</button>
+      ${s.estLoaded?`<button class="clear-btn" style="padding:7px 11px" onclick="document.getElementById('fAct-${key}').click()" title="${eligible&&s.actLoaded?'Extra CSVs only fill drivers with no actuals yet':'Completed run — after deliveries'}">${addLabel('act')}</button>`:''}
+    </div>`;
+}
+
+// Remove ONE uploaded CSV (weeks from 19 Oct).
+//   Estimated: removes only the drivers that file added (a duplicate file
+//   that added nobody removes nobody). If it was the 1st file, the next one
+//   becomes the 1st. Removing the last Estimated file also clears actuals.
+//   Actuals: clears only the actuals that file filled.
+// Everyone else is left exactly as they are.
+function removeUpload(day, city, kind, index){
+  const s = state[day][city];
+  if(!isRateWeekEligible(s)) return;
+  const est = getUploads(s,'est'), act = getUploads(s,'act');
+  const list = kind==='est' ? est : act, u = list[index];
+  if(!u) return;
+  const onSaved = viewingArchiveIndex >= 0;
+  const lastEst = kind==='est' && est.length===1;
+  const affected = u.drivers.filter(n=>s.drivers[n]);
+  const msg = 'Remove this '+(kind==='est'?'Estimated':'Actuals')+' CSV from '+city+' — '+day+'?\n\n'+u.name+'\n\n'
+    + (affected.length
+        ? (kind==='est' ? '• Removes '+affected.length+' driver(s) it added: '+affected.join(', ') : '• Clears the actuals it filled for: '+affected.join(', '))
+        : '• It didn\'t add or fill any drivers, so nobody\'s pay changes')
+    + (lastEst && act.length ? '\n• It\'s the only Estimated CSV, so the Actuals CSVs are cleared too' : '')
+    + '\n• Every other driver stays exactly as they are'
+    + (onSaved ? '\n• This saved week is updated straight away' : '');
+  if(!confirm(msg)) return;
+  const touched = [];
+  if(kind==='est'){
+    affected.forEach(n=>{ delete s.drivers[n]; });
+    const rest = est.filter((_,i)=>i!==index);
+    s._estUploads = rest; s._estFiles = rest.map(x=>x.name);
+    if(!rest.length){
+      s.drivers = {}; s.estLoaded = false; s.actLoaded = false;
+      s._estFile = undefined; s._estUploads = []; s._estFiles = []; s._actUploads = []; s._actFiles = []; s._actFile = undefined; s._lastAdd = null; s._actNotFound = [];
+    } else {
+      if(index===0){ s._estFile = rest[0].name; rest[0].drivers.forEach(n=>{ if(s.drivers[n]) delete s.drivers[n]._estFile; }); }
+      // keep the Actuals list tidy
+      const restAct = act.map(x=>({ ...x, drivers: x.drivers.filter(n=>s.drivers[n]) }));
+      s._actUploads = restAct; s._actFiles = restAct.map(x=>x.name);
+    }
+  } else {
+    affected.forEach(n=>{
+      const d = s.drivers[n], c = d._c || (d._c = {});
+      c._actFirst = ''; c._actLast = ''; delete c.actBoxes; c.foodBoxes = 0; delete d._actFile;
+      touched.push(n);
+    });
+    const rest = act.filter((_,i)=>i!==index);
+    s._actUploads = rest; s._actFiles = rest.map(x=>x.name);
+    if(!rest.length){ s.actLoaded = false; s._actFile = undefined; s._actNotFound = []; }
+    else if(index===0) s._actFile = rest[0].name;
+  }
+  s._lastAdd = null;
+  logChange('Removed one CSV', city+' '+day+': '+(kind==='est'?'Estimated':'Actuals')+' '+u.name+(affected.length?' — '+(kind==='est'?'removed ':'cleared actuals for ')+affected.join(', '):' — no drivers affected'));
+  updateDot(day,city); buildMain();
+  setTimeout(()=>{
+    touched.forEach(n=>compute(day,city,n));
+    if(onSaved) saveViewedArchiveWeek(); else autoSaveSession();
+  }, 50);
+}
+
+// ── DRIVERS TABLE (compact) ───────────────────────────────────────────────────
+// One row per driver. Same fields and ids as the old driver cards, so every
+// calculation works exactly as before.
+function buildDriverTable(day, city){
+  const key = `${day}-${city}`, s = state[day][city];
+  const money = v => v ? '$'+v.toFixed(2) : '—';
+  let rows = '';
+  for(const name in s.drivers){
+    const d = s.drivers[name], c = d._c || {};
+    const estHrs = tM(d.depotEnd)!==null && tM(d.depotStart)!==null ? ((tM(d.depotEnd)-tM(d.depotStart))/60).toFixed(2) : '—';
+    const own = isRateWeekEligible(s) ? getDriverOwnRate(day,city,name) : null;
+    const fixedLbl = getFixedBonusLabel(day,city,name) || ((city==='Sydney' && !isRateWeekEligible(s)) ? '+$13.00 (gate fee, auto)' : '');
+    rows += `<tr>
+      <td class="dt-name">${name}<div class="dt-sub">${d.stops} stops · ~${Math.round(d.totalKm)} km</div></td>
+      <td>${isRateEditable(s)
+          ? `<input type="number" class="dt-in" id="${key}_${name}_rate" value="${getDriverRate(day,city,name)}" step="0.01" onchange="setDriverRate('${day}','${city}','${name}',this.value)" title="This driver's own rate. Leave blank to use the default rate."${own!==null&&own!==undefined?' style="color:#c0392b;font-weight:600"':''}>`
+          : `$${getDriverRate(day,city,name)}`}</td>
+      <td>${d.stops}</td>
+      <td><input type="number" class="dt-in narrow" id="${key}_${name}_adj" value="${c.adj||0}" oninput="compute('${day}','${city}','${name}')"></td>
+      <td><span id="${key}_${name}_actBoxes_display">${c.actBoxes||d.stops}</span><input type="hidden" id="${key}_${name}_actBoxes" value="${c.actBoxes||d.stops}"></td>
+      <td>${d.depotStart||'—'}</td><td>${d.depotEnd||'—'}</td><td>${estHrs}</td>
+      <td><span id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</span><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></td>
+      <td><span id="${key}_${name}_actLast_display">${c._actLast||'—'}</span><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></td>
+      <td>${fixedLbl?`<div class="dt-fixed" title="Set in ⚙️ Settings">${fixedLbl} 🔒</div>`:''}<input type="number" class="dt-in" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')" ${fixedLbl?'placeholder="Extra"':''}></td>
+      <td class="r-val" id="${key}_${name}_estPay">${money(c.estPay)}</td>
+      <td class="r-val" id="${key}_${name}_finalPerBox">${money(c.finalPerBox)}</td>
+      <td class="r-val" id="${key}_${name}_finalHourly">${money(c.finalHourly)}</td>
+      <td class="r-val dt-pay" id="${key}_${name}_finalPay">${money(c.finalPay)}</td>
+      <td class="r-val" id="${key}_${name}_speed">${c.speed!=null?Math.round(c.speed)+'%':'—'}</td>
+      <td class="r-val" id="${key}_${name}_6pm">${c.sixPM||'—'}</td>
+      <td style="display:none"><span id="${key}_${name}_estPerBox"></span><span id="${key}_${name}_timeTaken"></span></td>
+    </tr>`;
+  }
+  const t = driverTableTotals(day, city);
+  return `<div class="dt-wrap"><table class="drv-table">
+    <thead><tr><th>Driver</th><th>Rate/hr</th><th>Est boxes</th><th>Adj ✎</th><th>Act boxes</th><th>Run start</th><th>Run end</th><th>Est hrs</th><th>Act first</th><th>Act last</th><th>Bonus &amp; fines ✎</th><th>Est pay</th><th>Final/box</th><th>Final hourly</th><th>Final pay</th><th>Speed</th><th>6PM</th><th style="display:none"></th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td>TOTAL</td><td></td><td></td><td></td><td id="tot-${key}-boxes">${t.boxes}</td><td></td><td></td><td></td><td></td><td></td><td id="tot-${key}-bonus">${t.bonus?'$'+t.bonus.toFixed(2):'—'}</td><td id="tot-${key}-est">${fmtMoney(t.est)}</td><td></td><td></td><td id="tot-${key}-final">${fmtMoney(t.final)}</td><td></td><td></td><td style="display:none"></td></tr></tfoot>
+  </table></div>`;
+}
+function driverTableTotals(day, city){
+  const D = state[day][city].drivers; let boxes=0, est=0, final=0, bonus=0;
+  for(const n in D){ const c=D[n]._c||{}; boxes+=(c.actBoxes||D[n].stops); est+=(c.estPay||0); final+=(c.finalPay||0); bonus+=(c.bonus||0)+(c.fixedBonus||0); }
+  return {boxes, est, final, bonus};
+}
+function updateDriverTableTotals(day, city){
+  const key = `${day}-${city}`, el = document.getElementById(`tot-${key}-final`);
+  if(!el) return;
+  const t = driverTableTotals(day, city);
+  el.textContent = fmtMoney(t.final);
+  document.getElementById(`tot-${key}-est`).textContent = fmtMoney(t.est);
+  document.getElementById(`tot-${key}-boxes`).textContent = t.boxes;
+  document.getElementById(`tot-${key}-bonus`).textContent = t.bonus ? '$'+t.bonus.toFixed(2) : '—';
 }
 
 // ── DROP ZONES ────────────────────────────────────────────────────────────────
@@ -1487,6 +1881,19 @@ function normalizeNewRoutific(rows, mode, taken){
       } else name = 'Route '+(bi+1);
       unnamedRoutes++;
     }
+    // Times after midnight: Routific writes "12:30am", which would read as
+    // 00:30 and give negative hours. Within a route times only move forward,
+    // so a time that jumps back by more than 3 hours is the next day and is
+    // written as "24:30" (the same way the old Routific format did it).
+    let lastMin = null;
+    const seq = t => {
+      const v = to24h(t); if(!v) return v;
+      const p = v.match(/^(\d{1,2}):(\d{2})$/); if(!p) return v;
+      let m = parseInt(p[1])*60 + parseInt(p[2]);
+      while(lastMin !== null && m < lastMin - 180) m += 1440;
+      if(lastMin === null || m > lastMin) lastMin = m;
+      return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+    };
     b.rows.forEach(r => {
       const cust = get(r,'Customer name');
       let stop, startAt, finishBy = '';
@@ -1502,7 +1909,8 @@ function normalizeNewRoutific(rows, mode, taken){
         startAt = get(r,'Start At') || get(r,'Planned arrival time');
         finishBy = get(r,'Planned departure time');
       }
-      out.push([name, String(stop), to24h(startAt), to24h(finishBy), get(r,'Distance (km)'), get(r,'Tags')]);
+      const sa = seq(startAt), fb = seq(finishBy);
+      out.push([name, String(stop), sa, fb, get(r,'Distance (km)'), get(r,'Tags')]);
     });
   });
   return { rows: out, unnamedRoutes };
@@ -1543,7 +1951,8 @@ function loadEst(day,city,file){
     const drivers=parseEstRows(rows);
     s.drivers=drivers; s.estLoaded=true; s._estFile=file.name;
     s._estFormat=format; s._estUnnamedRoutes=unnamedRoutes;
-    if(isRateWeekEligible(s)){ s._estFiles=[file.name]; s._lastAdd=null; }
+    if(isRateWeekEligible(s)){ s._estFiles=[file.name]; s._lastAdd=null; s._estUploads=[{id:Date.now()+'e',name:file.name,drivers:Object.keys(drivers)}]; s._actUploads=[]; }
+    logChange('Estimated CSV uploaded', city+' '+day+': '+file.name+' ('+Object.keys(drivers).length+' drivers)');
     updateDot(day,city); buildMain();
     setTimeout(()=>{ for(const name in state[day][city].drivers) compute(day,city,name); autoSaveSession(); if(isRateWeekEligible(s)) saveViewedArchiveWeek(); }, 50);
   };
@@ -1561,6 +1970,16 @@ function loadEst(day,city,file){
 //   • Only the newly added/filled drivers are calculated; nobody else is.
 // Weeks before 19 Oct 2026 work exactly as before (a new upload replaces).
 // To start a day/city over, use "✕ Clear" and upload again.
+// Driver names are matched ignoring capitals and extra spaces (weeks from
+// 19 Oct): "Angus", "angus " and "ANGUS" are the same driver.
+function nameKey(n){ return String(n||'').trim().replace(/\s+/g,' ').toLowerCase(); }
+function findDriverName(drivers, name){
+  if(drivers[name]) return name;
+  const k = nameKey(name);
+  for(const n in drivers) if(nameKey(n) === k) return n;
+  return null;
+}
+
 function isMultiCsvAddMode(s){
   return !!(s && s.estLoaded && isRateWeekEligible(s) && Object.keys(s.drivers||{}).length > 0);
 }
@@ -1583,15 +2002,17 @@ function addEstimatedCsv(day, city, file, text){
   const incoming = parseEstRows(rows);
   const added = [], skipped = [];
   for(const name in incoming){
-    if(s.drivers[name]){ skipped.push(name); continue; }   // already loaded — keep the original
+    if(findDriverName(s.drivers, name)){ skipped.push(name); continue; }   // already loaded — keep the original
     incoming[name]._estFile = file.name;
     s.drivers[name] = incoming[name];
     added.push(name);
   }
   if(!s._estFiles) s._estFiles = [s._estFile];
+  s._estUploads = getUploads(s,'est').concat([{ id:Date.now()+'e', name:file.name, drivers:added.slice() }]);
   s._estFiles.push(file.name);
   if(unnamed && added.some(n=>/^Route \d+$/.test(n))) s._estUnnamedRoutes = (s._estUnnamedRoutes||0) + added.filter(n=>/^Route \d+$/.test(n)).length;
   s._lastAdd = { kind:'Estimated', file:file.name, added, skipped };
+  logChange('Extra Estimated CSV added', city+' '+day+': '+file.name+' — added '+(added.join(', ')||'none')+(skipped.length?'; skipped '+skipped.join(', '):''));
   updateDot(day,city); buildMain();
   setTimeout(()=>{
     added.forEach(name=>compute(day,city,name));             // only the new drivers
@@ -1624,11 +2045,13 @@ function loadAct(day,city,file){
     const sAct=state[day][city];
     const addMode=isActAddMode(sAct), eligible=isRateWeekEligible(sAct);
     const filled=[], skipped=[], notFound=[];
-    for(const name in act){
-      if(!state[day][city].drivers[name]){ if(addMode) notFound.push(name); continue; }
+    for(const actName in act){
+      // Weeks from 19 Oct: match ignoring capitals/spaces; older weeks: exact (as before)
+      const name = eligible ? findDriverName(state[day][city].drivers, actName) : (state[day][city].drivers[actName] ? actName : null);
+      if(!name){ if(eligible) notFound.push(actName); continue; }
       // Extra Actuals CSV: never overwrite a driver who already has actuals
       if(addMode && driverHasActuals(state[day][city].drivers[name])){ skipped.push(name); continue; }
-      const a=act[name],dc=state[day][city].drivers[name]._c;
+      const a=act[actName],dc=state[day][city].drivers[name]._c;
       dc._actFirst=a.firstStop?a.firstStop.substring(0,5):'';
       dc._actLast =a.lastStop ?a.lastStop.substring(0,5):'';
       if(a.actBoxes>0)dc.actBoxes=a.actBoxes;
@@ -1638,11 +2061,14 @@ function loadAct(day,city,file){
     }
     if(addMode){
       if(!sAct._actFiles) sAct._actFiles=[sAct._actFile];
+      sAct._actUploads=getUploads(sAct,'act').concat([{ id:Date.now()+'a', name:file.name, drivers:filled.slice() }]);
       sAct._actFiles.push(file.name);
       sAct._lastAdd={ kind:'Actuals', file:file.name, added:filled, skipped, notFound };
+      logChange('Extra Actuals CSV added', city+' '+day+': '+file.name+' — filled '+(filled.join(', ')||'none')+(skipped.length?'; skipped '+skipped.join(', '):''));
     } else {
       state[day][city].actLoaded=true; state[day][city]._actFile=file.name;
-      if(eligible){ sAct._actFiles=[file.name]; }
+      if(eligible){ sAct._actFiles=[file.name]; sAct._actNotFound=notFound; sAct._actUploads=[{ id:Date.now()+'a', name:file.name, drivers:filled.slice() }]; }
+      logChange('Actuals CSV uploaded', city+' '+day+': '+file.name+' ('+filled.length+' drivers matched'+(notFound.length?', not matched: '+notFound.join(', '):'')+')');
     }
     updateDot(day,city); buildMain();
     setTimeout(()=>{ autoSaveSession(); if(eligible) saveViewedArchiveWeek(); }, 100);
@@ -1697,7 +2123,7 @@ function buildDriverCards(day,city){
           <div class="field-group"><label>Act First Stop</label><div class="val" id="${key}_${name}_actFirst_display">${c._actFirst||'—'}</div><input type="hidden" id="${key}_${name}_actFirst" value="${c._actFirst||''}"></div>
           <div class="field-group"><label>Act Last Stop</label><div class="val" id="${key}_${name}_actLast_display">${c._actLast||'—'}</div><input type="hidden" id="${key}_${name}_actLast" value="${c._actLast||''}"></div>
           <div class="field-group"><label>Bonus & Fines ($) ${getFixedBonusLabel(day,city,name)?'🔒 ✎':' ✎'}</label>
-            ${city==='Sydney'
+            ${(city==='Sydney' && !isRateWeekEligible(state[day][city]))
               ? `<div class="val" style="font-family:'DM Mono',monospace;font-size:11px;color:#569556;margin-bottom:4px">+$13.00 (gate fee, auto) 🔒</div>
                  <input type="number" class="tag-input" id="${key}_${name}_bonus" value="${c.bonus||0}" step="0.01" oninput="compute('${day}','${city}','${name}')" placeholder="Extra bonus/fines">`
               : (getFixedBonusLabel(day,city,name)
@@ -1864,6 +2290,7 @@ function setHourlyRate(day, city, value){
   }
   hourlyRateSetting = v;
   saveHourlyRateToFirebase();
+  logChange('Default hourly rate', '$'+current+' → $'+v);
   if(onSaved) applyWeekRateToCurrentWeekCopy(v);
   ALL_DAYS.forEach(dy=>{
     DAY_CITIES[dy].forEach(c=>{
@@ -1970,6 +2397,7 @@ function setDriverRate(day, city, name, value){
   if(useWeek) delete driverRateSetting[city][name];
   else driverRateSetting[city][name] = v;
   saveDriverRatesToFirebase();
+  logChange('Driver hourly rate', name+' ('+city+'): $'+current+' → '+(useWeek?'default $'+weekRate:'$'+v));
   if(onSaved){
     // Store the driver's rate on every day of this saved week for this city
     ALL_DAYS.forEach(dy=>{
@@ -2013,6 +2441,361 @@ async function loadDriverRatesFromFirebase(){
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── PAY RULES (⚙️ SETTINGS TAB) — EDITABLE FROM WEEK OF 19 OCT 2026 ───────────
+// The rules that used to be written into the code are now settings:
+//   weekly/fixed bonuses (e.g. Lakmal +$125 Brisbane Friday), fixed $/box
+//   drivers (e.g. Angus / DeeDeeHo $8 Brisbane Friday), city fees (e.g. Sydney
+//   $13 gate fee), per-box minimum, food relief rate, 6PM finish cutoff, and
+//   the warning thresholds.
+// Same safety rules as the hourly rates:
+//   • Weeks before 19 Oct 2026 ALWAYS use DEFAULT_RULES (the original numbers)
+//     with the original exact-name matching — they never change.
+//   • A change applies to the week being viewed (current or saved, from
+//     19 Oct) and to every new week. Each week stores its own rules (s._rules),
+//     so other saved weeks keep what they had.
+//   • A driver whose name contains "$8" still gets $8/box on Brisbane Friday
+//     (the original naming convention).
+// ══════════════════════════════════════════════════════════════════════════════
+const DEFAULT_RULES = {
+  weeklyBonuses: [ { driver:'Lakmal', city:'Brisbane', day:'Friday', amount:125, label:'weekly bonus' } ],
+  fixedPerBox:   [ { driver:'Angus', city:'Brisbane', day:'Friday', amount:8 },
+                   { driver:'DeeDeeHo', city:'Brisbane', day:'Friday', amount:8 } ],
+  cityFees:      [ { city:'Sydney', day:'Every day', amount:13, label:'gate fee' } ],
+  perBoxMin: 5,
+  foodReliefRate: 5.50,
+  finishCutoff: '18:30',
+  warn: { maxPerBox: 15, maxHours: 12, lateMins: 30, slowSpeed: 80 },
+  // Per-week switches (weeks from 19 Oct). Off = no deduction / no comp, and
+  // the tab is hidden. Food Relief starts OFF from the week of 20 Oct; Fuel
+  // null = follow the original Fuel switch as it is today.
+  foodReliefOn: false,
+  fuelCompOn: null
+};
+let liveRules = JSON.parse(JSON.stringify(DEFAULT_RULES));
+
+function getRules(s){
+  if(!isRateWeekEligible(s)) return DEFAULT_RULES;                    // older weeks: original rules
+  if(isLiveRateWeek(s)) return liveRules;                             // current week: live settings
+  return (s && s._rules) ? s._rules : DEFAULT_RULES;                  // saved week: its own rules
+}
+function rulesFor(day, city){ return getRules(state[day][city]); }
+function frRateFor(day, city){ return rulesFor(day, city).foodReliefRate; }
+// The week being viewed, if it's from 19 Oct onwards (any of its day/cities)
+function viewedEligibleState(){
+  for(const d of ALL_DAYS) for(const c of DAY_CITIES[d]) if(isRateWeekEligible(state[d][c])) return state[d][c];
+  return null;
+}
+// Food Relief on for a day/city's week? Older weeks: the original switch.
+function weekFoodReliefOn(s){
+  if(!isRateWeekEligible(s)) return foodReliefEnabled;
+  return getRules(s).foodReliefOn === true;
+}
+// Fuel comp on for a week from 19 Oct? (null in the rules = original switch)
+function weekFuelOn(s){
+  const v = getRules(s).fuelCompOn;
+  return (typeof v === 'boolean') ? v : fuelCompEnabled;
+}
+// Food Relief on for the week being viewed
+function frOn(){ const vs = viewedEligibleState(); return vs ? weekFoodReliefOn(vs) : foodReliefEnabled; }
+const ruleDayMatch = (r, day) => !r.day || r.day==='Every day' || r.day===day;
+
+// Fixed bonuses / fees / fixed $/box that apply to one driver on one day
+function fixedRulesFor(day, city, name){
+  const s = state[day][city], R = getRules(s), eligible = isRateWeekEligible(s);
+  const same = (a,b) => eligible ? nameKey(a)===nameKey(b) : a===b;
+  const out = { bonus:0, perBox:null, labels:[], short:[] };
+  (R.weeklyBonuses||[]).forEach(r=>{
+    if(r.city===city && ruleDayMatch(r,day) && same(r.driver,name)){
+      out.bonus += +r.amount||0; out.labels.push('+$'+(+r.amount).toFixed(2)+' ('+(r.label||'bonus')+')'); out.short.push(r.label?r.label.charAt(0).toUpperCase()+r.label.slice(1):'Bonus');
+    }
+  });
+  let pb = null;
+  (R.fixedPerBox||[]).forEach(r=>{ if(r.city===city && ruleDayMatch(r,day) && same(r.driver,name)) pb = +r.amount; });
+  if(pb===null && city==='Brisbane' && day==='Friday' && name.includes('$8')) pb = 8.0;   // "$8" name convention
+  if(pb!==null){ out.perBox = pb; out.labels.push('Final/Box fixed $'+pb.toFixed(2)); out.short.push('Fixed $'+pb+'/box'); }
+  (R.cityFees||[]).forEach(r=>{
+    if(r.city===city && ruleDayMatch(r,day)){
+      out.bonus += +r.amount||0; out.labels.push('+$'+(+r.amount).toFixed(2)+' ('+(r.label||'fee')+')'); out.short.push(r.label?r.label.charAt(0).toUpperCase()+r.label.slice(1):'Fee');
+    }
+  });
+  return out;
+}
+
+async function savePayRulesToFirebase(){
+  try {
+    const payload = { rules: JSON.parse(JSON.stringify(liveRules)), updatedAt: new Date().toISOString() };
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'settings', 'payRules'), payload);
+    }
+    localStorage.setItem('funkyPayRules', JSON.stringify(payload));
+  } catch(e){ console.error('Could not save pay rules:', e); }
+}
+async function loadPayRulesFromFirebase(){
+  const apply = d => { if(d && d.rules && typeof d.rules==='object') liveRules = Object.assign(JSON.parse(JSON.stringify(DEFAULT_RULES)), JSON.parse(JSON.stringify(d.rules))); };
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'payRules'));
+      if(snap.exists()){ apply(snap.data()); return; }
+    }
+  } catch(e){ console.error('Firebase load error (payRules):', e); }
+  try { const saved = localStorage.getItem('funkyPayRules'); if(saved) apply(JSON.parse(saved)); } catch(e){}
+}
+
+// ── CHANGE LOG ────────────────────────────────────────────────────────────────
+// Who changed what and when: rates, uploads, clears, saves, settings.
+// Kept in Firebase (settings/changeLog, newest 500) + localStorage backup.
+let changeLog = [];
+function whoAmI(){ try { return (window._auth && window._auth.currentUser && window._auth.currentUser.email) || 'unknown'; } catch(e){ return 'unknown'; } }
+function viewedWeekLabel(){
+  if(viewingArchiveIndex >= 0 && weekArchive[viewingArchiveIndex]) return weekArchive[viewingArchiveIndex].label + ' (saved)';
+  const t = CITIES.map(c=>state['Tuesday'][c]?.date).filter(Boolean)[0];
+  return t ? getWeekLabel(t) : 'Current week';
+}
+async function logChange(action, details){
+  const entry = { at: new Date().toISOString(), by: whoAmI(), week: viewedWeekLabel(), action, details: details||'' };
+  changeLog.unshift(entry); changeLog = changeLog.slice(0,500);
+  try { localStorage.setItem('funkyChangeLog', JSON.stringify(changeLog)); } catch(e){}
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc, setDoc } = window._firestoreFns;
+      const ref = doc(window._db, 'settings', 'changeLog');
+      const snap = await getDoc(ref);
+      const remote = (snap.exists() && Array.isArray(snap.data().entries)) ? snap.data().entries : [];
+      const merged = [entry].concat(remote).slice(0,500);
+      await setDoc(ref, { entries: merged, updatedAt: entry.at });
+      changeLog = merged;
+    }
+  } catch(e){ console.error('Could not save change log:', e); }
+}
+async function loadChangeLog(){
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, getDoc } = window._firestoreFns;
+      const snap = await getDoc(doc(window._db, 'settings', 'changeLog'));
+      if(snap.exists() && Array.isArray(snap.data().entries)){ changeLog = snap.data().entries; return; }
+    }
+  } catch(e){ console.error('Firebase load error (changeLog):', e); }
+  try { const saved = localStorage.getItem('funkyChangeLog'); if(saved) changeLog = JSON.parse(saved); } catch(e){}
+}
+
+// ── POP-UP NOTICES (instead of browser alert boxes) ───────────────────────────
+// Information messages show as a small notice in the corner and fade away.
+// Questions that need a yes/no (confirm) still use the normal dialog.
+function showToast(msg, kind){
+  let wrap = document.getElementById('toastWrap');
+  if(!wrap){
+    wrap = document.createElement('div'); wrap.id = 'toastWrap';
+    wrap.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:420px';
+    document.body.appendChild(wrap);
+  }
+  const t = document.createElement('div');
+  const warn = kind==='warn';
+  t.style.cssText = 'font-family:Sora,sans-serif;font-size:13px;line-height:1.45;padding:12px 16px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.15);white-space:pre-line;cursor:pointer;transition:opacity .3s;'
+    + (warn ? 'background:#ffe1e1;border:1.5px solid #e6595c;color:#8a1f1f' : 'background:#e8f5e8;border:1.5px solid #569556;color:#1b1c1e');
+  t.textContent = String(msg);
+  t.onclick = () => t.remove();
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(), 350); }, warn ? 8000 : 4000);
+}
+window.alert = function(msg){
+  const m = String(msg);
+  showToast(m, /could not|can't|only|please|⚠|error|not |no data|go back/i.test(m) && !m.startsWith('✅') ? 'warn' : 'ok');
+};
+// ══════════════════════════════════════════════════════════════════════════════
+
+
+// ── ⚙️ SETTINGS TAB ───────────────────────────────────────────────────────────
+let settingsDraft = null; // edited copy of the rules until "Save settings"
+function viewedWeekEligible(){
+  return ALL_DAYS.some(d=>DAY_CITIES[d].some(c=>isRateWeekEligible(state[d][c])));
+}
+function renderSettings(){
+  const main = document.getElementById('mainContent');
+  if(!settingsDraft) settingsDraft = JSON.parse(JSON.stringify(liveRules));
+  const R = settingsDraft;
+  const dayOpts = sel => ['Every day'].concat(ALL_DAYS).map(d=>`<option${d===sel?' selected':''}>${d}</option>`).join('');
+  const cityOpts = sel => CITIES.map(c=>`<option${c===sel?' selected':''}>${c}</option>`).join('');
+  const inp = 'style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;background:#fff"';
+  const card = (title, sub, body) => `<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px">
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#1b1c1e">${title}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:4px 0 12px">${sub}</div>${body}</div>`;
+  const table = (heads, rows, addFn) => `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>${heads.map(h=>`<th style="text-align:left;padding:6px 6px;color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase">${h}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <button class="clear-btn" style="margin-top:10px" onclick="${addFn}">＋ Add</button>`;
+  const td = x => `<td style="padding:4px 6px">${x}</td>`;
+  const del = (list,i) => `<td style="padding:4px 6px;width:30px"><button class="clear-btn" style="padding:6px 9px" onclick="settingsDraft.${list}.splice(${i},1);renderSettings()">✕</button></td>`;
+  const bind = (path) => `onchange="setDraft('${path}', this.value)"`;
+
+  const bonusRows = (R.weeklyBonuses||[]).map((r,i)=>`<tr>
+      ${td(`<input ${inp} value="${r.driver||''}" ${bind('weeklyBonuses.'+i+'.driver')}>`)}
+      ${td(`<select ${inp} ${bind('weeklyBonuses.'+i+'.city')}>${cityOpts(r.city)}</select>`)}
+      ${td(`<select ${inp} ${bind('weeklyBonuses.'+i+'.day')}>${dayOpts(r.day)}</select>`)}
+      ${td(`<input type="number" step="0.01" ${inp} value="${r.amount}" ${bind('weeklyBonuses.'+i+'.amount')}>`)}
+      ${td(`<input ${inp} value="${r.label||''}" ${bind('weeklyBonuses.'+i+'.label')}>`)}
+      ${del('weeklyBonuses',i)}</tr>`).join('');
+  const pbRows = (R.fixedPerBox||[]).map((r,i)=>`<tr>
+      ${td(`<input ${inp} value="${r.driver||''}" ${bind('fixedPerBox.'+i+'.driver')}>`)}
+      ${td(`<select ${inp} ${bind('fixedPerBox.'+i+'.city')}>${cityOpts(r.city)}</select>`)}
+      ${td(`<select ${inp} ${bind('fixedPerBox.'+i+'.day')}>${dayOpts(r.day)}</select>`)}
+      ${td(`<input type="number" step="0.01" ${inp} value="${r.amount}" ${bind('fixedPerBox.'+i+'.amount')}>`)}
+      ${del('fixedPerBox',i)}</tr>`).join('');
+  const feeRows = (R.cityFees||[]).map((r,i)=>`<tr>
+      ${td(`<select ${inp} ${bind('cityFees.'+i+'.city')}>${cityOpts(r.city)}</select>`)}
+      ${td(`<select ${inp} ${bind('cityFees.'+i+'.day')}>${dayOpts(r.day||'Every day')}</select>`)}
+      ${td(`<input type="number" step="0.01" ${inp} value="${r.amount}" ${bind('cityFees.'+i+'.amount')}>`)}
+      ${td(`<input ${inp} value="${r.label||''}" ${bind('cityFees.'+i+'.label')}>`)}
+      ${del('cityFees',i)}</tr>`).join('');
+  const field = (label, path, val, type, hint) => `<div style="flex:1;min-width:160px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">${label}</div>
+      <input type="${type||'number'}" ${type==='time'?'step="60"':'step="0.01"'} ${inp} value="${val}" ${bind(path)}>
+      ${hint?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">${hint}</div>`:''}</div>`;
+
+  const changed = JSON.stringify(settingsDraft)!==JSON.stringify(liveRules);
+  const eligible = viewedWeekEligible();
+  const driverRates = Object.entries(driverRateSetting).flatMap(([c,m])=>Object.entries(m||{}).map(([n,v])=>`${n} (${c}) $${v}/hr`));
+
+  let html = `<div style="max-width:980px">
+    <div class="status-banner ${eligible?'success':'error'}" style="margin-bottom:16px"><span style="font-size:16px">${eligible?'⚙️':'🔒'}</span><span>
+      Changes here apply from the <strong>week of 19 Oct 2026</strong> onwards: to the week you're viewing
+      (<strong>${viewedWeekLabel()}</strong>${eligible?'':' — this week is before 19 Oct, so it stays on the original rules'})
+      and to every new week. Other saved weeks keep the rules they were saved with. Weeks before 19 Oct never change.</span></div>`;
+  const fuelNow = (typeof R.fuelCompOn==='boolean') ? R.fuelCompOn : fuelCompEnabled;
+  const sw = (on, onclick, label, sub) => `<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:260px">
+      <button onclick="${onclick}" style="width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;position:relative;background:${on?'#4a7c59':'#d0d0c8'}">
+        <span style="position:absolute;top:2px;left:${on?'22px':'2px'};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s"></span></button>
+      <div><div style="font-size:13px;font-weight:600">${label}: <span style="color:${on?'#4a7c59':'#c0392b'}">${on?'ON':'OFF'}</span></div><div style="font-size:11px;color:var(--text-muted)">${sub}</div></div></div>`;
+  html += card('🔀 Food Relief & Fuel', 'When OFF there\'s no deduction / compensation in pay, and the tab is hidden. When ON it\'s included in the weekly pay.',
+    `<div style="display:flex;gap:18px;flex-wrap:wrap">
+      ${sw(R.foodReliefOn===true, "settingsDraft.foodReliefOn=!(settingsDraft.foodReliefOn===true);renderSettings()", 'Food Relief', '$'+(+R.foodReliefRate).toFixed(2)+'/box rate on food relief boxes')}
+      ${sw(fuelNow, "settingsDraft.fuelCompOn=!("+fuelNow+");renderSettings()", 'Fuel compensation', 'Fuel price compensation for drivers')}</div>`);
+  html += card('💰 Bonuses', 'A fixed amount added to a driver\'s pay on a day (e.g. Lakmal\'s weekly bonus).',
+    table(['Driver','City','Day','Amount ($)','Label'], bonusRows, "settingsDraft.weeklyBonuses.push({driver:'',city:'Brisbane',day:'Friday',amount:0,label:'bonus'});renderSettings()"));
+  html += card('📦 Fixed $ per box', 'Final Per Box is set to this amount for the driver on that day. Drivers with "$8" in their name still get $8 on Brisbane Friday.',
+    table(['Driver','City','Day','$ / box'], pbRows, "settingsDraft.fixedPerBox.push({driver:'',city:'Brisbane',day:'Friday',amount:8});renderSettings()"));
+  html += card('🏙️ City fees', 'Added to every driver in that city (e.g. Sydney market gate fee).',
+    table(['City','Day','Amount ($)','Label'], feeRows, "settingsDraft.cityFees.push({city:'Sydney',day:'Every day',amount:0,label:'fee'});renderSettings()"));
+  html += card('🧮 Pay rules', 'Used in every pay calculation.', `<div style="display:flex;gap:14px;flex-wrap:wrap">
+      ${field('Per box minimum ($)','perBoxMin',R.perBoxMin)}
+      ${field('Food relief rate ($/box)','foodReliefRate',R.foodReliefRate)}
+      ${field('Finish cutoff (6PM check)','finishCutoff',R.finishCutoff,'time','Later than this shows as late')}</div>`);
+  html += card('⚠️ Warning thresholds', 'Used by the Warnings check. They don\'t change pay.', `<div style="display:flex;gap:14px;flex-wrap:wrap">
+      ${field('Flag Final/Box above ($)','warn.maxPerBox',R.warn.maxPerBox)}
+      ${field('Flag est. hours above','warn.maxHours',R.warn.maxHours)}
+      ${field('Flag finishing late by (mins)','warn.lateMins',R.warn.lateMins)}
+      ${field('Flag driver speed below (%)','warn.slowSpeed',R.warn.slowSpeed)}</div>`);
+  // Warnings legend — what each warning means (uses the thresholds above)
+  const li = (t, d) => `<li style="margin:5px 0"><strong>${t}</strong><span style="color:var(--text-muted)"> — ${d}</span></li>`;
+  html += card('📖 What the warnings mean', 'Warnings flag things that often mean wrong pay, so you can check them before saving the week. They never change any numbers. See the full list for a week at the top of the Weekly Summary tab.',
+    `<div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12px;line-height:1.45">
+      <div style="flex:1;min-width:280px"><div style="font-weight:600;margin-bottom:4px">🔴 Important — pay is probably wrong or incomplete</div><ul style="margin:0;padding-left:18px">
+        ${li('No Actuals CSV uploaded yet','pay is based on the plan only (expected until that day\'s actuals are in)')}
+        ${li('No actual stop times','a driver has no actual times from the Actuals CSV')}
+        ${li('In the Actuals CSV but not in any Estimated CSV','that driver isn\'t being paid — check the spelling in Routific or add their Estimated CSV')}
+        ${li('No driver name ("Route 1", "Route 2")','their own rate, bonuses and invoice details won\'t apply')}
+        ${li('0 boxes','the driver has no boxes')}
+        ${li('Route start/end times look wrong','e.g. the end is before the start')}
+        ${li('Actual last stop is before first stop','the actual times don\'t make sense')}</ul></div>
+      <div style="flex:1;min-width:260px"><div style="font-weight:600;margin-bottom:4px">🟠 Worth a look</div><ul style="margin:0;padding-left:18px">
+        ${li('Long route','estimated hours over '+R.warn.maxHours)}
+        ${li('High Final/Box','over $'+R.warn.maxPerBox+' per box')}</ul>
+        <div style="font-weight:600;margin:12px 0 4px">⚪ Minor — shown in the list, not counted in the grid</div><ul style="margin:0;padding-left:18px">
+        ${li('Finished late','last stop '+R.warn.lateMins+'+ mins after the '+R.finishCutoff+' cutoff')}
+        ${li('Slow','driver speed under '+R.warn.slowSpeed+'%')}
+        ${li('No invoice details saved','add them in the Invoices tab')}</ul></div>
+    </div>`);
+  html += `<div style="display:flex;gap:10px;align-items:center;margin:4px 0 26px">
+      <button class="export-btn" ${changed?'':'disabled style="opacity:.5"'} onclick="saveSettings()">💾 Save settings</button>
+      <button class="clear-btn" ${changed?'':'disabled style="opacity:.5"'} onclick="settingsDraft=null;renderSettings()">Undo changes</button>
+      <button class="clear-btn" onclick="if(confirm('Load the original rules into the form? Nothing changes until you click Save settings.')){settingsDraft=JSON.parse(JSON.stringify(DEFAULT_RULES));renderSettings();}">Load original rules</button>
+      ${changed?'<span style="font-size:12px;color:#c0392b">Unsaved changes</span>':''}</div>`;
+  html += card('⏱️ Hourly rates', 'Changed on the day tabs: the "Rate / hr" box (default rate) and each driver\'s "Rate / hr" box.',
+    `<div style="font-size:12px">Default rate for new weeks: <strong>$${hourlyRateSetting}/hr</strong><br>Drivers with their own rate: ${driverRates.length?driverRates.map(x=>'<strong>'+x+'</strong>').join(', '):'none'}</div>`);
+  const logRows = changeLog.slice(0,200).map(e=>`<tr style="border-top:1px solid #eee">
+      <td style="padding:6px;white-space:nowrap;font-family:'DM Mono',monospace;font-size:11px">${new Date(e.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</td>
+      <td style="padding:6px;font-size:11px">${e.by}</td><td style="padding:6px;font-size:11px">${e.week}</td>
+      <td style="padding:6px;font-size:12px"><strong>${e.action}</strong><br><span style="color:var(--text-muted)">${e.details}</span></td></tr>`).join('');
+  html += card('🕘 Change log', 'Rate changes, uploads, clears, saves and settings changes — newest first.',
+    logRows ? `<div style="max-height:420px;overflow:auto"><table style="width:100%;border-collapse:collapse">${logRows}</table></div>` : '<div style="font-size:12px;color:var(--text-muted)">No changes logged yet.</div>');
+  main.innerHTML = html + '</div>';
+}
+function setDraft(path, value){
+  const parts = path.split('.'); let o = settingsDraft;
+  for(let i=0;i<parts.length-1;i++) o = o[parts[i]];
+  const k = parts[parts.length-1];
+  o[k] = (['amount','perBoxMin','foodReliefRate','maxPerBox','maxHours','lateMins','slowSpeed'].includes(k)) ? (parseFloat(value)||0) : String(value).trim();
+  renderSettings();
+}
+function describeRuleChanges(a, b){
+  const out = [];
+  const fmtList = (l, f) => (l||[]).map(f).join('; ') || 'none';
+  const bl = r=>`${r.driver} ${r.city} ${r.day} $${r.amount}`, pl = r=>`${r.driver} ${r.city} ${r.day} $${r.amount}/box`, cl = r=>`${r.city} ${r.day} $${r.amount} ${r.label}`;
+  if(JSON.stringify(a.weeklyBonuses)!==JSON.stringify(b.weeklyBonuses)) out.push('Bonuses: '+fmtList(a.weeklyBonuses,bl)+' → '+fmtList(b.weeklyBonuses,bl));
+  if(JSON.stringify(a.fixedPerBox)!==JSON.stringify(b.fixedPerBox)) out.push('Fixed $/box: '+fmtList(a.fixedPerBox,pl)+' → '+fmtList(b.fixedPerBox,pl));
+  if(JSON.stringify(a.cityFees)!==JSON.stringify(b.cityFees)) out.push('City fees: '+fmtList(a.cityFees,cl)+' → '+fmtList(b.cityFees,cl));
+  if(a.perBoxMin!==b.perBoxMin) out.push('Per box min: $'+a.perBoxMin+' → $'+b.perBoxMin);
+  if(a.foodReliefRate!==b.foodReliefRate) out.push('Food relief rate: $'+a.foodReliefRate+' → $'+b.foodReliefRate);
+  if(a.finishCutoff!==b.finishCutoff) out.push('Finish cutoff: '+a.finishCutoff+' → '+b.finishCutoff);
+  if(JSON.stringify(a.warn)!==JSON.stringify(b.warn)) out.push('Warning thresholds changed');
+  const sw = v => v===true?'ON':v===false?'OFF':'as is ('+(fuelCompEnabled?'ON':'OFF')+')';
+  if(a.foodReliefOn!==b.foodReliefOn) out.push('Food Relief: '+sw(a.foodReliefOn)+' → '+sw(b.foodReliefOn));
+  if(a.fuelCompOn!==b.fuelCompOn) out.push('Fuel compensation: '+sw(a.fuelCompOn)+' → '+sw(b.fuelCompOn));
+  return out;
+}
+function saveSettings(){
+  const d = settingsDraft;
+  const bad = (d.weeklyBonuses||[]).concat(d.fixedPerBox||[]).some(r=>!r.driver);
+  if(bad){ alert('Please fill in the driver name on every bonus / fixed $ per box row (or remove the empty row).'); return; }
+  if(!(d.perBoxMin>=0) || !(d.foodReliefRate>=0) || !tM(d.finishCutoff)){ alert('Please check the pay rules — a value is missing.'); return; }
+  const changes = describeRuleChanges(liveRules, d);
+  if(!changes.length) return;
+  if(!applyRules(d, changes, 'Save these settings?')) return;
+  settingsDraft = null;
+  alert('✅ Settings saved.');
+  renderSettings();
+}
+// Food Relief / Fuel switch for the week being viewed (from 19 Oct) + new weeks
+function setWeekSwitch(key, value){
+  const d = JSON.parse(JSON.stringify(liveRules)); d[key] = value;
+  const vs = viewedEligibleState();
+  if(vs && key==='fuelCompOn' && liveRules.fuelCompOn===null) d.fuelCompOn = value;
+  const changes = describeRuleChanges(liveRules, d);
+  if(!changes.length){ // live value already matches — just store it on the viewed week
+    changes.push((key==='foodReliefOn'?'Food Relief':'Fuel compensation')+': '+(value?'ON':'OFF'));
+  }
+  if(applyRules(d, changes, 'Turn '+(key==='foodReliefOn'?'Food Relief':'Fuel compensation')+' '+(value?'ON':'OFF')+'?')){
+    settingsDraft = null;
+    alert('✅ '+(key==='foodReliefOn'?'Food Relief':'Fuel compensation')+' turned '+(value?'ON':'OFF')+'.');
+    buildTabs(); buildMain();
+  }
+}
+// Applies new rules to the viewed week (from 19 Oct) and to new weeks.
+function applyRules(d, changes, question){
+  const onSaved = viewingArchiveIndex >= 0, eligible = viewedWeekEligible();
+  if(!confirm(question+'\n\n• '+changes.join('\n• ')+'\n\nApplies to: '
+      + (eligible ? viewedWeekLabel()+(onSaved?' (saved straight to that week)':'')+' and every new week' : 'every new week (the week you\'re viewing is before 19 Oct and stays as it is)')
+      + '\nWeeks before 19 Oct 2026 and other saved weeks are NOT changed.')) return false;
+  liveRules = JSON.parse(JSON.stringify(d));
+  savePayRulesToFirebase();
+  // Store on the viewed week's days (from 19 Oct) and recalculate them
+  ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
+    const st = state[dy][c];
+    if(isRateWeekEligible(st)){ st._rules = JSON.parse(JSON.stringify(liveRules)); if(st.estLoaded) recomputeAll(dy,c); }
+  }));
+  if(onSaved){
+    // The current week (if from 19 Oct) follows the new rules too
+    if(savedCurrentState) ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{ const st=savedCurrentState[dy]&&savedCurrentState[dy][c]; if(st&&isRateWeekEligible(st)) st._rules=JSON.parse(JSON.stringify(liveRules)); }));
+    saveViewedArchiveWeek();
+  } else autoSaveSession();
+  logChange('Settings changed', changes.join(' | '));
+  return true;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── FIXED BONUS LABEL ────────────────────────────────────────────────────────
 function getFixedRate(city, name){
   if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) return 57;
@@ -2020,6 +2803,10 @@ function getFixedRate(city, name){
 }
 
 function getFixedBonusLabel(day, city, name){
+  if(isRateWeekEligible(state[day][city])){
+    const fx = fixedRulesFor(day, city, name);
+    return fx.labels.length ? fx.labels.join(' · ') : null;
+  }
   const labels = [];
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') labels.push('+$125.00 (weekly bonus)');
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') labels.push('Final/Box fixed $8.00');
@@ -2036,7 +2823,10 @@ function compute(day,city,name){
   // Stamp the rate onto eligible current weeks so it's saved with the week
   // and frozen once archived (older weeks are never stamped).
   if(isLiveRateWeek(s) && s._rate !== rate) s._rate = rate;
-  const pbMin = parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5;
+  const pbMin = isRateWeekEligible(s) ? getRules(s).perBoxMin
+              : (parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5);
+  // Store this week's rules with it (current week from 19 Oct only)
+  if(isLiveRateWeek(s) && JSON.stringify(s._rules)!==JSON.stringify(liveRules)) s._rules = JSON.parse(JSON.stringify(liveRules));
   // ── FIXED RATE OVERRIDES ──────────────────────────────────────────────────
   if(!isRateWeekEligible(s)){
     // Weeks before 19 Oct 2026 — original rule, unchanged
@@ -2069,17 +2859,24 @@ function compute(day,city,name){
 
   // ── FIXED BONUS RULES ────────────────────────────────────────────────────────
   let fixedBonus = 0;
+  if(isRateWeekEligible(s)){
+    // Weeks from 19 Oct: rules come from ⚙️ Settings (stored with the week)
+    const fx = fixedRulesFor(day, city, name);
+    fixedBonus += fx.bonus;
+    if(fx.perBox !== null) finalPerBox = fx.perBox;
+  } else {
   // Rule 1: Lakmal / Brisbane / Friday → +$125
   if(name==='Lakmal' && city==='Brisbane' && day==='Friday') fixedBonus += 125;
   // Rule 2: BNE_FRI_FIXED8 drivers / Brisbane / Friday → Final Per Box forced to $8.00
   if(isBneFriFixed8(name) && city==='Brisbane' && day==='Friday') finalPerBox = 8.0;
   // Rule 3: All Sydney drivers / Every day → +$13 market gate fee
   if(city==='Sydney') fixedBonus += 13;
+  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   const foodBoxes   = d._c.foodBoxes||0;
-  const foodRate    = 5.50;
-  const foodDeduction = (foodReliefEnabled && foodBoxes>0) ? (finalPerBox - foodRate) * foodBoxes * -1 : 0;
+  const foodRate    = getRules(s).foodReliefRate;
+  const foodDeduction = (weekFoodReliefOn(s) && foodBoxes>0) ? (finalPerBox - foodRate) * foodBoxes * -1 : 0;
   const finalPay    = finalPerBox*actBoxes+(bonus+fixedBonus)+(adj*finalPerBox)+foodDeduction;
   const finalHourly = estHrs>0?finalPay/estHrs:0;
   // Speed = (Est Last Stop - Est First Stop) / (Act Last Stop - Act First Stop)
@@ -2090,7 +2887,8 @@ function compute(day,city,name){
   let speed=null;
   if(estWindow!==null&&actWindow!==null&&actWindow>0)speed=(estWindow/actWindow)*100;
   let sixPM='—';
-  if(actLast){const m=tM(actLast);if(m<=1110)sixPM='Okay ✓';else{const ov=m-1110;sixPM=`+${Math.floor(ov/60)}:${String(ov%60).padStart(2,'0')} late`;}}
+  const cutoff = isRateWeekEligible(s) ? (tM(getRules(s).finishCutoff)||1110) : 1110;
+  if(actLast){const m=tM(actLast);if(m<=cutoff)sixPM='Okay ✓';else{const ov=m-cutoff;sixPM=`+${Math.floor(ov/60)}:${String(ov%60).padStart(2,'0')} late`;}}
 
   const fmt=v=>'$'+v.toFixed(2),pct=v=>Math.round(v)+'%';
   sR(`${key}_${name}_estPay`,fmt(estPay));
@@ -2117,6 +2915,7 @@ function compute(day,city,name){
     tB+=(c.actBoxes||state[day][city].drivers[n].stops);tE+=(c.estPay||0);tF+=(c.finalPay||0);
   }
   state[day][city]._totals={boxes:tB,est:tE,final:tF};
+  updateDriverTableTotals(day, city);
   // debounced auto-save
   clearTimeout(window._autoSaveTimer);
   window._autoSaveTimer = setTimeout(()=>autoSaveSession(), 2000);
@@ -2197,6 +2996,55 @@ function buildBoxCostTrendChart(city){
   </div>`;
 }
 
+
+// ── ⚠️ WARNINGS ───────────────────────────────────────────────────────────────
+// Checks the week being viewed for things that usually mean wrong pay.
+// Shown at the top of the Weekly Summary and before Save Week. Thresholds
+// come from ⚙️ Settings. Warnings never change any numbers.
+function weekWarnings(){
+  const out = [];
+  const add = (level, day, city, driver, msg) => out.push({level, day, city, driver, msg});
+  ALL_DAYS.forEach(day=>DAY_CITIES[day].forEach(city=>{
+    const s = state[day][city];
+    if(!s.estLoaded) return;
+    const R = getRules(s), W = R.warn || DEFAULT_RULES.warn;
+    const names = Object.keys(s.drivers||{});
+    if(!names.length){ add('high', day, city, '', 'Estimated CSV uploaded but no drivers were loaded'); return; }
+    if(!s.actLoaded) add('high', day, city, '', 'No Actuals CSV uploaded yet — pay is based on the plan only');
+    (s._actNotFound||[]).forEach(n=>add('high', day, city, n, 'In the Actuals CSV but not in any Estimated CSV — not paid'));
+    names.forEach(n=>{
+      const d = s.drivers[n], c = d._c||{};
+      if(/^Route \d+$/.test(n)) add('high', day, city, n, 'No driver name in Routific — invoice and driver rules won\'t apply');
+      if(s.actLoaded && !c._actFirst) add('high', day, city, n, 'No actual stop times');
+      if(!(d.stops>0) || !((c.actBoxes||d.stops)>0)) add('high', day, city, n, '0 boxes');
+      const hrs = mD(d.depotStart, d.depotEnd);
+      if(hrs===null || hrs<=0) add('high', day, city, n, 'Route start/end times look wrong ('+(d.depotStart||'—')+' → '+(d.depotEnd||'—')+')');
+      else if(hrs > W.maxHours) add('mid', day, city, n, 'Long route: '+hrs.toFixed(2)+' hrs (over '+W.maxHours+')');
+      if(c._actFirst && c._actLast && tM(c._actLast) < tM(c._actFirst)) add('high', day, city, n, 'Actual last stop is before first stop');
+      if((c.finalPerBox||0) > W.maxPerBox) add('mid', day, city, n, 'High Final/Box: $'+c.finalPerBox.toFixed(2)+' (over $'+W.maxPerBox+')');
+      const late = (c.sixPM||'').match(/\+(\d+):(\d+)/);
+      if(late && (parseInt(late[1])*60+parseInt(late[2])) >= W.lateMins) add('low', day, city, n, 'Finished late ('+c.sixPM+')');
+      if(c.speed!=null && c.speed < W.slowSpeed) add('low', day, city, n, 'Slow: '+Math.round(c.speed)+'% speed');
+      if(!(driverDetails[city] && driverDetails[city][n])) add('low', day, city, n, 'No invoice details saved for this driver');
+    });
+  }));
+  const rank = {high:0, mid:1, low:2};
+  return out.sort((a,b)=>rank[a.level]-rank[b.level] || ALL_DAYS.indexOf(a.day)-ALL_DAYS.indexOf(b.day));
+}
+function buildWarningsPanel(){
+  const list = weekWarnings();
+  const icon = {high:'🔴', mid:'🟠', low:'⚪'};
+  if(!list.length) return `<div class="status-banner success" style="margin-bottom:14px"><span style="font-size:16px">✅</span><span><strong>No warnings</strong> for ${viewedWeekLabel()}.</span></div>`;
+  const hi = list.filter(w=>w.level==='high').length;
+  let open = false; try { open = localStorage.getItem('funkyWarnOpen')==='1'; } catch(e){}
+  const rows = list.map(w=>`<tr style="border-top:1px solid #f0e6e6"><td style="padding:5px 8px">${icon[w.level]}</td>
+      <td style="padding:5px 8px;white-space:nowrap">${w.city} · ${w.day}</td><td style="padding:5px 8px"><strong>${w.driver||'—'}</strong></td><td style="padding:5px 8px">${w.msg}</td></tr>`).join('');
+  return `<details ${open?'open':''} ontoggle="try{localStorage.setItem('funkyWarnOpen',this.open?'1':'0')}catch(e){}" style="background:${hi?'#fff3f3':'#fffaf0'};border:1.5px solid ${hi?'#e6595c':'#e0b44c'};border-radius:12px;padding:10px 14px;margin-bottom:14px;font-family:Sora,sans-serif">
+    <summary style="cursor:pointer;font-size:13px"><strong>⚠️ ${list.length} warning(s)</strong> for ${viewedWeekLabel()} — ${hi} important. Click to ${open?'hide':'see'} them.</summary>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">${rows}</table></details>`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function renderWeekly(){
   const main=document.getElementById('mainContent');
   const hasAny=ALL_DAYS.some(day=>DAY_CITIES[day].some(city=>state[day][city].estLoaded));
@@ -2210,7 +3058,7 @@ function renderWeekly(){
       (has?` <span class="subtab-status">📋</span>`:'')+
       `</button>`;
   }).join('')+`</div>`;
-  main.innerHTML=subHtml;
+  main.innerHTML=buildWarningsPanel()+subHtml;
   main.innerHTML += buildBoxCostTrendChart(activeWeeklyCity);
 
   // columns matching the spreadsheet
@@ -2363,7 +3211,7 @@ function renderWeekly(){
     // ── Food Relief city-wide rate ──
     // Sum all food relief deductions across all days for this city
     let cityFRDeduction = 0;
-    if(foodReliefEnabled){
+    if(frOn()){
       ALL_DAYS.forEach(day => {
         if (!DAY_CITIES[day].includes(city)) return;
         const frKey = `${day}-${city}`;
@@ -2373,7 +3221,7 @@ function renderWeekly(){
           const cv = drivers[name]._c||{};
           const finalPerBox = cv.finalPerBox||0;
           const foodBoxes = fr.loaded ? (fr.foodData[name]||0) : (cv.foodBoxes||0);
-          if (foodBoxes > 0) cityFRDeduction += (finalPerBox - 5.50) * foodBoxes * -1;
+          if (foodBoxes > 0) cityFRDeduction += (finalPerBox - frRateFor(day,city)) * foodBoxes * -1;
         }
       });
     }
@@ -2496,15 +3344,15 @@ function renderFoodRelief(){
       <div style="font-weight:500;font-size:14px">🫙 Food Relief Deductions</div>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-family:'DM Mono',monospace;font-size:11px;color:#1b1c1e">
-          Food Relief: <strong style="color:${foodReliefEnabled?'#4a7c59':'#c0392b'}">${foodReliefEnabled?'ON':'PAUSED'}</strong>
+          Food Relief: <strong style="color:${frOn()?'#4a7c59':'#c0392b'}">${frOn()?'ON':'PAUSED'}</strong>
         </span>
         <button onclick="toggleFoodRelief()" style="
-          background:${foodReliefEnabled?'#4a7c59':'#d0d0c8'};
+          background:${frOn()?'#4a7c59':'#d0d0c8'};
           border:none;border-radius:999px;width:42px;height:22px;position:relative;
           cursor:pointer;padding:0;flex-shrink:0;transition:background 0.15s ease;
-        " title="${foodReliefEnabled?'Click to pause food relief deductions':'Click to enable food relief deductions'}">
+        " title="${frOn()?'Click to pause food relief deductions':'Click to enable food relief deductions'}">
           <span style="
-            position:absolute;top:2px;left:${foodReliefEnabled?'22px':'2px'};
+            position:absolute;top:2px;left:${frOn()?'22px':'2px'};
             width:18px;height:18px;border-radius:50%;background:white;
             transition:left 0.15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.25);
           "></span>
@@ -2512,7 +3360,7 @@ function renderFoodRelief(){
       </div>
     </div>
   </div>
-  ${!foodReliefEnabled ? `
+  ${!frOn() ? `
   <div style="background:#fdf3f0;border:1px solid #f0c9bd;color:#9a4a35;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px">
     ⏸ Food Relief deductions are currently <strong>paused</strong>. Drivers keep their normal per-box pay for food relief boxes, no team-wide donation pool is applied, and this won't appear on invoices, the weekly summary, or pay preview. Toggle the switch above to resume.
   </div>` : ''}`;
@@ -2535,8 +3383,8 @@ function renderFoodRelief(){
         const foodBoxes=fr.loaded?(fr.foodData[name]||0):(cv.foodBoxes||0);
         const finalPay=cv.finalPay||0;
         const finalPerBox=cv.finalPerBox||0;
-        const foodRate=5.50;
-        const foodDeduction=(foodReliefEnabled && foodBoxes>0)?(finalPerBox-foodRate)*foodBoxes*-1:0;
+        const foodRate=frRateFor(day,city);
+        const foodDeduction=(frOn() && foodBoxes>0)?(finalPerBox-foodRate)*foodBoxes*-1:0;
         const pct=finalPay>0?(foodDeduction/finalPay)*100:0;
         dayFinal+=finalPay; dayDeduction+=foodDeduction;
         rows+=`<tr>
@@ -2736,6 +3584,8 @@ function isFuelPriceEditableView(){
 // existed have no frozen flag — those fall back to the live toggle, same as
 // they've always shown (no behaviour change for them).
 function isFuelCompEffective(){
+  const vs = viewedEligibleState();
+  if(vs) return weekFuelOn(vs);          // weeks from 19 Oct: the week's own switch
   if(viewingArchiveIndex >= 1){
     const snap = weekArchive[viewingArchiveIndex];
     if(snap && typeof snap.fuelCompEnabled === 'boolean') return snap.fuelCompEnabled;
@@ -3094,6 +3944,7 @@ function clearAllCsvs(day, city){
     + '• Other days and cities are NOT touched\n'
     + (onSaved ? '• This saved week ('+weekArchive[viewingArchiveIndex].label+') is updated straight away\n' : '')
     + '\nThis can\'t be undone. Continue?')) return;
+  logChange('Cleared all CSVs', city+' '+day+(files.length?': '+files.join(', '):''));
   const keep = { date: s.date };
   if(typeof s._rate === 'number') keep._rate = s._rate;
   state[day][city] = Object.assign({ drivers:{}, estLoaded:false, actLoaded:false, _totals:{} }, keep);
@@ -3245,7 +4096,7 @@ function renderInvoice(){
       },0);
     },0);
     let cityFRDed = 0;
-    if(foodReliefEnabled){
+    if(frOn()){
       ALL_DAYS.forEach(day=>{
         if(!DAY_CITIES[day].includes(city)) return;
         const fr=frState[day+'-'+city]||{loaded:false,foodData:{}};
@@ -3254,7 +4105,7 @@ function renderInvoice(){
           const cv=drivers[n2]._c||{};
           const fpb=cv.finalPerBox||0;
           const fb=fr.loaded?(fr.foodData[n2]||0):(cv.foodBoxes||0);
-          if(fb>0) cityFRDed+=(fpb-5.50)*fb*-1;
+          if(fb>0) cityFRDed+=(fpb-frRateFor(day,city))*fb*-1;
         }
       });
     }
@@ -3369,6 +4220,8 @@ async function loadFuelCompEnabledFromFirebase(){
 }
 
 function toggleFuelComp(){
+  const vs = viewedEligibleState();
+  if(vs){ setWeekSwitch('fuelCompOn', !weekFuelOn(vs)); return; }
   fuelCompEnabled = !fuelCompEnabled;
   saveFuelCompEnabledToFirebase();
   // Only re-render whichever tab is currently visible, so toggling doesn't
@@ -3413,6 +4266,8 @@ async function loadFoodReliefEnabledFromFirebase(){
 }
 
 function toggleFoodRelief(){
+  const vs = viewedEligibleState();
+  if(vs){ setWeekSwitch('foodReliefOn', !weekFoodReliefOn(vs)); return; }
   foodReliefEnabled = !foodReliefEnabled;
   saveFoodReliefEnabledToFirebase();
   // Recompute every loaded day/city so finalPay/foodDeduction (which are
@@ -3528,7 +4383,7 @@ function generateInvoicePDF(name, city, invNum){
     for(const n2 in state[day][city].drivers){
       const cv=state[day][city].drivers[n2]._c||{};
       const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);
-      if(foodReliefEnabled && fb>0) cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;
+      if(frOn() && fb>0) cityFRDed+=(cv.finalPerBox-frRateFor(day,city))*fb*-1;
     }
   });
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
@@ -3720,7 +4575,7 @@ function buildInvoiceHTML(name,city,invNum){
   const allDriverNames=new Set();ALL_DAYS.forEach(day=>{if(DAY_CITIES[day].includes(city))Object.keys(state[day][city].drivers).forEach(n=>allDriverNames.add(n));});
   let cityTotalPay=0,cityFRDed=0;
   allDriverNames.forEach(n2=>{ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;cityTotalPay+=(state[day][city].drivers[n2]?._c?.finalPay||0);});});
-  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(foodReliefEnabled&&fb>0)cityFRDed+=(cv.finalPerBox-5.50)*fb*-1;}});
+  ALL_DAYS.forEach(day=>{if(!DAY_CITIES[day].includes(city))return;const fr=frState[day+'-'+city]||{};for(const n2 in state[day][city].drivers){const cv=state[day][city].drivers[n2]._c||{};const fb=fr.loaded?(fr.foodData?.[n2]||0):(cv.foodBoxes||0);if(frOn()&&fb>0)cityFRDed+=(cv.finalPerBox-frRateFor(day,city))*fb*-1;}});
   const frRate=cityTotalPay>0?cityFRDed/cityTotalPay:0;
   const frDeduction=subtotal*frRate;
   const isGSTInvalid=(det.gst||'').toUpperCase().includes('INVALID');
@@ -3875,6 +4730,8 @@ window._onFirebaseReady = async function(){
   await loadFoodReliefEnabledFromFirebase();
   await loadHourlyRateFromFirebase();
   await loadDriverRatesFromFirebase();
+  await loadPayRulesFromFirebase();
+  await loadChangeLog();
   // Then load session — but DON'T let it call loadArchiveFromFirebase again
   await autoLoadSession();
   // Refresh nav now that everything is loaded
