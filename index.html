@@ -630,6 +630,9 @@ document.getElementById('todayDate').textContent = new Date().toLocaleDateString
 
 // ── AUTO SAVE / LOAD ──────────────────────────────────────────────────────────
 async function autoSaveSession(){
+  // While a saved week is being viewed, `state` holds that saved week — never
+  // write it over the current week's session.
+  if(viewingArchiveIndex >= 0) return;
   try {
     const sessionData = {
       state: JSON.parse(JSON.stringify(state)),
@@ -997,6 +1000,11 @@ function navigateWeek(dir){
       if(savedCurrentFR) Object.assign(frState, JSON.parse(JSON.stringify(savedCurrentFR)));
       Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
       if(savedCurrentFuel) Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(savedCurrentFuel)));
+      // Rates may have changed while a saved week was open — refresh only
+      // the current week's days from 19 Oct onwards (older days untouched).
+      ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{
+        if(state[dy][c].estLoaded && isRateWeekEligible(state[dy][c])) recomputeAll(dy,c);
+      }); });
     }
   }
 
@@ -1353,7 +1361,7 @@ function buildCityBody(day, city) {
           : `<div class="val" style="font-family:'DM Mono',monospace;font-size:13px">${auDate(s.date)}</div>`
         }
       </div>
-      <div class="config-card"><label>Rate / hr ($)${isRateEditable(s)?' ✎':' 🔒'}</label><input type="number" id="rate-${key}" value="${getHourlyRate(s)}" step="0.01" ${isRateEditable(s)?`onchange="setHourlyRate('${day}','${city}',this.value)" title="Applies to all days & cities this week and future weeks"`:`disabled title="${isRateWeekEligible(s)?'Saved week — rate is frozen':'Weeks before 19 Oct 2026 keep their original rate'}"`}></div>
+      <div class="config-card"><label>Rate / hr ($)${isRateEditable(s)?' ✎':' 🔒'}</label><input type="number" id="rate-${key}" value="${getHourlyRate(s)}" step="0.01" ${isRateEditable(s)?`onchange="setHourlyRate('${day}','${city}',this.value)" title="Applies to all days & cities of this week and future weeks"`:`disabled title="Weeks before 19 Oct 2026 keep their original rate"`}></div>
       <div class="config-card"><label>Per Box Min ($)</label><input type="number" id="pbmin-${key}" value="${s._pbmin||5}" step="0.01" oninput="s['${day}']['${city}']._pbmin=parseFloat(this.value);recomputeAll('${day}','${city}')"></div>
     </div>
     <div id="driverArea-${key}">
@@ -1683,15 +1691,60 @@ let hourlyRateSetting = DEFAULT_HOURLY_RATE; // live rate for new weeks
 function isRateWeekEligible(s){
   return !!(s && s.date && s.date >= RATE_EDITABLE_FROM);
 }
-// True when the Rate box can be edited (eligible week + current week view)
+// True when the Rate boxes can be edited: any week from 19 Oct 2026 onwards,
+// whether it's the current week or a saved (archived) week.
 function isRateEditable(s){
+  return isRateWeekEligible(s);
+}
+// True when this is the CURRENT (unsaved) week from 19 Oct onwards — the only
+// place the live settings apply. Saved weeks always use their own stored rates.
+function isLiveRateWeek(s){
   return isRateWeekEligible(s) && viewingArchiveIndex < 0;
 }
-// The $/hr to use for a day/city (before fixed-rate driver overrides)
+// The $/hr to use for a day/city (before driver-specific rates)
 function getHourlyRate(s){
   if(!isRateWeekEligible(s)) return (s && s._rate) || DEFAULT_HOURLY_RATE; // original rule, untouched
-  if(s && typeof s._rate === 'number' && s._rate > 0) return s._rate;       // rate saved with this week
-  return hourlyRateSetting;                                                 // live rate for new weeks
+  if(s && typeof s._rate === 'number' && s._rate > 0) return s._rate;       // rate stored with this week
+  if(viewingArchiveIndex < 0) return hourlyRateSetting;                     // current week: live rate
+  return DEFAULT_HOURLY_RATE;                                               // saved week with no stored rate
+}
+
+// Writes the saved week being viewed back to the archive (Firebase +
+// localStorage) after a rate change on it. Only the day/cities that exist in
+// that saved week are written, so nothing from the current week leaks in.
+async function saveViewedArchiveWeek(){
+  if(viewingArchiveIndex < 0) return;
+  const snap = weekArchive[viewingArchiveIndex];
+  if(!snap || !snap.state) return;
+  ALL_DAYS.forEach(day=>{
+    DAY_CITIES[day].forEach(city=>{
+      if(snap.state[day] && snap.state[day][city])
+        snap.state[day][city] = JSON.parse(JSON.stringify(state[day][city]));
+    });
+  });
+  snap.netPayByCity = {
+    Brisbane:  computeCityNetPay('Brisbane'),
+    Sydney:    computeCityNetPay('Sydney'),
+    Melbourne: computeCityNetPay('Melbourne'),
+  };
+  snap.ratesEditedAt = new Date().toISOString();
+  try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+  try {
+    if(window._firebaseReady && window._db && snap._id){
+      const { doc, setDoc } = window._firestoreFns;
+      await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
+    }
+  } catch(e){ console.error('Could not save rate change to saved week:', e); alert('Could not save the change to this saved week — please try again.'); }
+}
+
+// When a saved week's rate is changed, the current week (if it's also from
+// 19 Oct onwards) follows the same default rate, like any new week would.
+function applyWeekRateToCurrentWeekCopy(v){
+  if(!savedCurrentState) return;
+  ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{
+    const st = savedCurrentState[dy] && savedCurrentState[dy][c];
+    if(st && isRateWeekEligible(st)) st._rate = v;
+  }); });
 }
 
 // Called from the Rate / hr box (on change, not on every keystroke)
@@ -1701,22 +1754,25 @@ function setHourlyRate(day, city, value){
   const current = getHourlyRate(s);
   if(!isRateEditable(s)){
     if(input) input.value = current;
-    alert('The hourly rate can only be changed for the week of 19 Oct 2026 onwards, on the current week. Previous weeks stay at their original rate.');
+    alert('Weeks before 19 Oct 2026 keep their original rate and can\'t be changed.');
     return;
   }
   const v = Math.round(parseFloat(value)*100)/100;
   if(isNaN(v) || v <= 0){ if(input) input.value = current; alert('Please enter a valid hourly rate.'); return; }
   if(v === current) return;
-  if(!confirm('Change the hourly rate from $'+current+' to $'+v+'?\n\n'
-    + '• Applies to ALL days and cities of the current week\n'
+  const onSaved = viewingArchiveIndex >= 0;
+  const which = onSaved ? 'the saved week '+weekArchive[viewingArchiveIndex].label : 'the current week';
+  if(!confirm('Change the default hourly rate from $'+current+' to $'+v+'?\n\n'
+    + '• Applies to ALL days and cities of '+which+(onSaved?' (saved straight to that week)':'')+'\n'
     + '• Becomes the default rate for every new week after this\n'
-    + '• Weeks before 19 Oct 2026 and already-saved older weeks are NOT changed\n'
+    + '• Weeks before 19 Oct 2026 and other saved weeks are NOT changed\n'
     + '• Drivers with their own rate (e.g. PegahTwo / MatiasTwo) keep their own rate')){
     if(input) input.value = current;
     return;
   }
   hourlyRateSetting = v;
   saveHourlyRateToFirebase();
+  if(onSaved) applyWeekRateToCurrentWeekCopy(v);
   ALL_DAYS.forEach(dy=>{
     DAY_CITIES[dy].forEach(c=>{
       const st = state[dy][c];
@@ -1725,7 +1781,10 @@ function setHourlyRate(day, city, value){
   });
   ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{ if(state[dy][c].estLoaded) recomputeAll(dy,c); }); });
   buildMain();
-  setTimeout(()=>{ ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{ if(state[dy][c].estLoaded) recomputeAll(dy,c); }); }); autoSaveSession(); }, 50);
+  setTimeout(()=>{
+    ALL_DAYS.forEach(dy=>{ DAY_CITIES[dy].forEach(c=>{ if(state[dy][c].estLoaded) recomputeAll(dy,c); }); });
+    if(onSaved) saveViewedArchiveWeek(); else autoSaveSession();
+  }, 50);
 }
 
 async function saveHourlyRateToFirebase(){
@@ -1776,8 +1835,8 @@ function liveDriverRate(city, name){
 function getDriverOwnRate(day, city, name){
   const s = state[day][city], d = s && s.drivers && s.drivers[name];
   if(!isRateWeekEligible(s)) return getFixedRate(city, name);            // original rule, untouched
-  if(isRateEditable(s)) return liveDriverRate(city, name);               // current week: live setting
-  if(d && Object.prototype.hasOwnProperty.call(d, '_rateOv')) return d._rateOv; // saved week: frozen
+  if(isLiveRateWeek(s)) return liveDriverRate(city, name);               // current week: live setting
+  if(d && Object.prototype.hasOwnProperty.call(d, '_rateOv')) return d._rateOv; // saved week: its own stored rate
   return getFixedRate(city, name);
 }
 // The $/hr actually used for this driver on this day/city
@@ -1794,21 +1853,24 @@ function setDriverRate(day, city, name, value){
   const weekRate = getHourlyRate(s);
   if(!isRateEditable(s)){
     if(input) input.value = current;
-    alert('Rates can only be changed for the week of 19 Oct 2026 onwards, on the current week. Previous weeks stay at their original rate.');
+    alert('Weeks before 19 Oct 2026 keep their original rate and can\'t be changed.');
     return;
   }
   const blank = String(value).trim()==='';
   const v = blank ? weekRate : Math.round(parseFloat(value)*100)/100;
   if(!blank && (isNaN(v) || v <= 0)){ if(input) input.value = current; alert('Please enter a valid hourly rate.'); return; }
   const useWeek = blank || v === weekRate;
-  if(v === current && (useWeek ? liveDriverRate(city,name)===null : liveDriverRate(city,name)===v)){ if(input) input.value = current; return; }
+  const ownNow = getDriverOwnRate(day, city, name);
+  if(useWeek ? (ownNow===null || ownNow===undefined) : ownNow===v){ if(input) input.value = current; return; }
+  const onSaved = viewingArchiveIndex >= 0;
+  const which = onSaved ? 'the saved week '+weekArchive[viewingArchiveIndex].label+' (saved straight to that week)' : 'the current week';
   const msg = useWeek
     ? 'Set '+name+' ('+city+') back to the default rate of $'+weekRate+'/hr?'
     : 'Set '+name+' ('+city+') to their own rate of $'+v+'/hr (instead of $'+current+')?';
   if(!confirm(msg+'\n\n'
-    + '• Applies to '+name+' on every '+city+' day of the current week\n'
+    + '• Applies to '+name+' on every '+city+' day of '+which+'\n'
     + '• Stays for '+name+' in every new week after this\n'
-    + '• Weeks before 19 Oct 2026 and already-saved older weeks are NOT changed')){
+    + '• Weeks before 19 Oct 2026 and other saved weeks are NOT changed')){
     if(input) input.value = current;
     return;
   }
@@ -1816,9 +1878,20 @@ function setDriverRate(day, city, name, value){
   if(useWeek) delete driverRateSetting[city][name];
   else driverRateSetting[city][name] = v;
   saveDriverRatesToFirebase();
+  if(onSaved){
+    // Store the driver's rate on every day of this saved week for this city
+    ALL_DAYS.forEach(dy=>{
+      if(!DAY_CITIES[dy].includes(city)) return;
+      const st = state[dy][city], dr = st && st.drivers && st.drivers[name];
+      if(dr && isRateWeekEligible(st)) dr._rateOv = useWeek ? null : v;
+    });
+  }
   ALL_DAYS.forEach(dy=>{ if(DAY_CITIES[dy].includes(city) && state[dy][city].estLoaded) recomputeAll(dy,city); });
   buildMain();
-  setTimeout(()=>{ ALL_DAYS.forEach(dy=>{ if(DAY_CITIES[dy].includes(city) && state[dy][city].estLoaded) recomputeAll(dy,city); }); autoSaveSession(); }, 50);
+  setTimeout(()=>{
+    ALL_DAYS.forEach(dy=>{ if(DAY_CITIES[dy].includes(city) && state[dy][city].estLoaded) recomputeAll(dy,city); });
+    if(onSaved) saveViewedArchiveWeek(); else autoSaveSession();
+  }, 50);
 }
 
 async function saveDriverRatesToFirebase(){
@@ -1870,7 +1943,7 @@ function compute(day,city,name){
   let rate  = getHourlyRate(s);
   // Stamp the rate onto eligible current weeks so it's saved with the week
   // and frozen once archived (older weeks are never stamped).
-  if(isRateEditable(s) && s._rate !== rate) s._rate = rate;
+  if(isLiveRateWeek(s) && s._rate !== rate) s._rate = rate;
   const pbMin = parseFloat(document.getElementById('pbmin-'+key)?.value) || s._pbmin || 5;
   // ── FIXED RATE OVERRIDES ──────────────────────────────────────────────────
   if(!isRateWeekEligible(s)){
@@ -1878,7 +1951,7 @@ function compute(day,city,name){
     if(city==='Sydney' && (name==='PegahTwo' || name==='MatiasTwo')) rate = 57;
   } else {
     const own = getDriverOwnRate(day, city, name);
-    if(isRateEditable(s)) d._rateOv = (own !== null && own !== undefined) ? own : null; // save with the week
+    if(isLiveRateWeek(s)) d._rateOv = (own !== null && own !== undefined) ? own : null; // save with the week
     if(own !== null && own !== undefined) rate = own;
   }
   // ─────────────────────────────────────────────────────────────────────────
