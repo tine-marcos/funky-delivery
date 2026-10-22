@@ -1365,6 +1365,10 @@ function buildCityBody(day, city) {
         <div class="file-name" id="nAct-${key}">${s.actLoaded?((s._actFiles&&s._actFiles.length>1)?s._actFiles.map((f,i)=>'✓ '+(i===0?'(1st) ':'(+) ')+f).join('<br>'):'✓ '+s._actFile):''}</div>
       </div>
     </div>
+    ${(isRateWeekEligible(s) && (s.estLoaded||s.actLoaded)) ? `
+    <div style="display:flex;justify-content:flex-end;margin:-4px 0 12px">
+      <button class="clear-btn" onclick="clearAllCsvs('${day}','${city}')" title="Remove every uploaded Estimated & Actuals CSV for ${city} on ${day} and start this day from scratch">✕ Clear all uploaded CSVs (${city} · ${day})</button>
+    </div>` : ''}
     ${buildEstimatedStatusBanner(day,city)}
     ${buildActualsStatusBanner(day,city)}
     ${buildLastAddBanner(day,city)}
@@ -1386,7 +1390,7 @@ function buildCityBody(day, city) {
     ${s.estLoaded ? `
     <div class="actions-row">
       <button class="export-btn" onclick="exportCity('${day}','${city}')">⬇ Export ${city} CSV</button>
-      <button class="clear-btn" onclick="clearCity('${day}','${city}')">✕ Clear ${city}</button>
+      <button class="clear-btn" onclick="${isRateWeekEligible(s)?'clearAllCsvs':'clearCity'}('${day}','${city}')">✕ Clear ${city}</button>
     </div>` : ''}`;
 }
 
@@ -3071,6 +3075,32 @@ function exportFoodRelief(){
   dl(csv,'funky-food-food-relief.csv');
 }
 function dl(csv,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();}
+
+// ── CLEAR ALL UPLOADED CSVs (WEEK OF 19 OCT 2026 ONWARDS) ────────────────────
+// Removes every Estimated & Actuals CSV for ONE day & city so it can be
+// uploaded again from scratch (the next upload becomes the new "1st" CSV).
+// Works on the current week and on saved weeks from 19 Oct onwards — on a
+// saved week the cleared day is saved straight back to that week.
+// Keeps: the delivery date and the week's hourly rate. Other days/cities,
+// Food Relief, Fuel and driver rate overrides are not touched.
+function clearAllCsvs(day, city){
+  const s = state[day][city];
+  if(!isRateWeekEligible(s)){ clearCity(day, city); return; }
+  const onSaved = viewingArchiveIndex >= 0;
+  const files = [].concat(s._estFiles || (s._estFile?[s._estFile]:[]), s._actFiles || (s._actFile?[s._actFile]:[]));
+  if(!confirm('Clear ALL uploaded CSVs for '+city+' — '+day+' ('+auDate(s.date)+')?\n\n'
+    + (files.length ? 'Files removed:\n• '+files.join('\n• ')+'\n\n' : '')
+    + '• All drivers, times, adjustments and bonuses for this day & city are removed\n'
+    + '• Other days and cities are NOT touched\n'
+    + (onSaved ? '• This saved week ('+weekArchive[viewingArchiveIndex].label+') is updated straight away\n' : '')
+    + '\nThis can\'t be undone. Continue?')) return;
+  const keep = { date: s.date };
+  if(typeof s._rate === 'number') keep._rate = s._rate;
+  state[day][city] = Object.assign({ drivers:{}, estLoaded:false, actLoaded:false, _totals:{} }, keep);
+  updateDot(day,city); buildMain();
+  if(onSaved) saveViewedArchiveWeek(); else autoSaveSession();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function clearCity(day,city){
   const date=state[day][city].date;
