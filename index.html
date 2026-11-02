@@ -406,7 +406,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, query, where } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -424,7 +424,7 @@
       const auth = getAuth(app);
       window._db = db;
       window._auth = auth;
-      window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection };
+      window._firestoreFns = { doc, setDoc, getDoc, getDocs, deleteDoc, collection, query, where };
       window._firebaseReady = true;
       console.log('Firebase connected! ☁️');
 
@@ -975,7 +975,7 @@ async function saveCurrentWeek(){
     // Save to Firebase using the STABLE id (overwrites instead of duplicates)
     if(window._firebaseReady && window._db){
       const { doc, setDoc, getDocs, collection, deleteDoc } = window._firestoreFns;
-      await backupWeekDoc(stableId, 'Before Save Week');
+      if(!(await backupWeekDoc(stableId, 'Before Save Week'))){ alert(BACKUP_FAILED_MSG); await loadArchiveFromFirebase(); return; }
       await setDoc(doc(window._db, 'weekArchive', stableId), snapshot);
       console.log('Saved to Firebase:', stableId);
 
@@ -990,7 +990,7 @@ async function saveCurrentWeek(){
           }
         });
         for(const id of toDelete){
-          await backupWeekDoc(id, 'Before duplicate cleanup');
+          if(!(await backupWeekDoc(id, 'Before duplicate cleanup'))) continue;
           await deleteDoc(doc(window._db, 'weekArchive', id));
           console.log('🗑 Deleted duplicate:', id);
         }
@@ -1049,6 +1049,10 @@ function navigateWeek(dir){
     Object.assign(frState, JSON.parse(JSON.stringify(snap.frState||{})));
     Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]);
     Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(snap.fuelVehicleType||{})));
+    if(viewingArchiveIndex < LIVE_SAVED_WEEKS){
+      const res = patchFeesInWeekState(state);
+      if(res.changed && res.notes.length) showToast('Bonus/fee figures updated to the current ⚙️ Settings: '+res.notes.join(', ')+'.\nUnlock and Save Week to keep them.', 'ok');
+    }
   } else {
     // back to current — restore saved current state
     if(savedCurrentState){
@@ -1990,6 +1994,7 @@ function loadEst(day,city,file){
   if(guardSavedWeek()) return;
   const reader=new FileReader();
   reader.onload=e=>{
+    keepOriginalCsv(day, city, 'est', file.name, e.target.result);
     let rows=parseCSV(e.target.result.replace(/^﻿/,''));
     let format='old', unnamedRoutes=0;
     if(rows.length && isNewRoutificFormat(rows[0])){
@@ -2075,6 +2080,7 @@ function loadAct(day,city,file){
   if(guardSavedWeek()) return;
   const reader=new FileReader();
   reader.onload=e=>{
+    keepOriginalCsv(day, city, 'act', file.name, e.target.result);
     let rows=parseCSV(e.target.result.replace(/^\uFEFF/,''));
     if(rows.length && isNewRoutificFormat(rows[0])) rows=normalizeNewRoutific(rows,'act').rows;
     const h=rows[0],idx=k=>h.indexOf(k);
@@ -2308,6 +2314,49 @@ function toggleWeekLock(){
   updateWeekNav(); buildMain();
 }
 
+// ── 📁 ORIGINAL CSVs ──────────────────────────────────────────────────────────
+// Every Estimated / Actuals CSV uploaded is also kept, exactly as uploaded, in
+// Firestore 'csvOriginals' (one record per file). A week can then always be
+// rebuilt from its original Routific files: ⚙️ Settings → Original CSVs.
+function tuesdayOf(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()-((d.getDay()-2+7)%7));
+  return d.toISOString().slice(0,10);
+}
+async function keepOriginalCsv(day, city, kind, fileName, text){
+  try {
+    if(!window._firebaseReady || !window._db || !text) return;
+    if(text.length > 950000){ console.warn('CSV too large to keep:', fileName); return; }
+    const date = (state[day] && state[day][city] && state[day][city].date) || '';
+    const week = tuesdayOf(date);
+    const { doc, setDoc } = window._firestoreFns;
+    const id = 'csv_'+week+'_'+day+'_'+city+'_'+kind+'_'+Date.now();
+    await setDoc(doc(window._db, 'csvOriginals', id), { week, day, city, kind, date, fileName, uploadedAt:new Date().toISOString(), by:whoAmI(), text });
+  } catch(e){ console.error('Could not keep original CSV:', e); }
+}
+let csvOriginalsList = null, csvOriginalsWeek = null;
+async function loadCsvOriginals(week){
+  csvOriginalsWeek = week; csvOriginalsList = [];
+  try {
+    if(window._firebaseReady && window._db && week){
+      const { getDocs, collection, query, where } = window._firestoreFns;
+      const snap = await getDocs(query(collection(window._db, 'csvOriginals'), where('week','==',week)));
+      snap.forEach(d=>{ const x=d.data(); csvOriginalsList.push({ id:d.id, ...x }); });
+      csvOriginalsList.sort((a,b)=>ALL_DAYS.indexOf(a.day)-ALL_DAYS.indexOf(b.day) || a.city.localeCompare(b.city) || a.uploadedAt.localeCompare(b.uploadedAt));
+    }
+  } catch(e){ console.error('Could not load original CSVs:', e); }
+  if(activeTab==='Settings') renderSettings();
+}
+function downloadOriginalCsv(i){
+  const x = csvOriginalsList && csvOriginalsList[i]; if(!x) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([x.text], {type:'text/csv'}));
+  a.download = x.fileName || ('routific-'+x.day+'-'+x.city+'.csv'); a.click();
+}
+function downloadAllOriginalCsvs(){
+  (csvOriginalsList||[]).forEach((x,i)=>setTimeout(()=>downloadOriginalCsv(i), i*400));
+}
+
 // ── 🛟 BACKUPS & RESTORE ──────────────────────────────────────────────────────
 // Before a saved week is overwritten or deleted, the old copy is kept in
 // Firestore 'weekArchiveBackups' (newest 15 per week). ⚙️ Settings → Backups
@@ -2327,14 +2376,16 @@ function weekSummary(snap){
   }));
   return parts.length ? parts.join(', ') : 'no data';
 }
+// Returns true when a copy was kept (or there was nothing to copy), false if
+// the copy failed — callers then STOP and change nothing.
 async function backupWeekDoc(id, reason){
   try {
-    if(!window._firebaseReady || !window._db || !id) return;
+    if(!window._firebaseReady || !window._db || !id) return true;
     const { doc, getDoc, setDoc, getDocs, collection, deleteDoc } = window._firestoreFns;
     const snap = await getDoc(doc(window._db, 'weekArchive', id));
-    if(!snap.exists()) return;
+    if(!snap.exists()) return true;
     const data = snap.data();
-    if(!loadedCellCount(data.state)) return; // nothing worth keeping
+    if(!loadedCellCount(data.state)) return true; // nothing worth keeping
     const at = new Date().toISOString();
     const all = await getDocs(collection(window._db, 'weekArchiveBackups'));
     const mine = []; all.forEach(d=>{ if(d.data().weekId===id) mine.push({id:d.id, at:d.data().backedUpAt, original:!!d.data().isOriginal}); });
@@ -2343,8 +2394,10 @@ async function backupWeekDoc(id, reason){
     // keep the ORIGINAL forever + the newest 15 other backups per week
     const others = mine.filter(m=>!m.original).sort((a,b)=>b.at.localeCompare(a.at));
     for(const old of others.slice(14)) await deleteDoc(doc(window._db, 'weekArchiveBackups', old.id));
-  } catch(e){ console.error('Backup failed:', e); }
+    return true;
+  } catch(e){ console.error('Backup failed:', e); return false; }
 }
+const BACKUP_FAILED_MSG = 'Could not keep a copy of the saved week first, so NOTHING was changed.\n\nCheck your internet connection, or the Firestore Rules allow the "weekArchiveBackups" collection, then try again.';
 let backupList = null;   // backups from Firestore
 let backupFileWeeks = null; // weeks found in an uploaded backup file
 async function loadBackupList(){
@@ -2369,7 +2422,7 @@ async function restoreWeekSnapshot(snapshot, source){
   try {
     if(window._firebaseReady && window._db){
       const { doc, setDoc } = window._firestoreFns;
-      await backupWeekDoc(id, 'Before restore');
+      if(!(await backupWeekDoc(id, 'Before restore'))){ alert(BACKUP_FAILED_MSG); return; }
       await setDoc(doc(window._db, 'weekArchive', id), snapshot);
     }
     for(let i=weekArchive.length-1;i>=0;i--) if(weekArchive[i]._id===id || weekArchive[i].label===snapshot.label) weekArchive.splice(i,1);
@@ -2428,7 +2481,7 @@ async function saveViewedArchiveWeek(){
   try {
     if(window._firebaseReady && window._db && snap._id){
       const { doc, setDoc } = window._firestoreFns;
-      await backupWeekDoc(snap._id, 'Before saved-week update');
+      if(!(await backupWeekDoc(snap._id, 'Before saved-week update'))){ alert(BACKUP_FAILED_MSG); return; }
       await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
     }
   } catch(e){ console.error('Could not save rate change to saved week:', e); alert('Could not save the change to this saved week — please try again.'); }
@@ -2671,8 +2724,13 @@ function liveSavedWeekLabels(){
 }
 function getRules(s){
   if(!isRateWeekEligible(s)) return DEFAULT_RULES;                    // older weeks: original rules
-  if(isLiveRulesWeek(s)) return liveRules;                            // current + most recent saved week: live settings
-  return (s && s._rules) ? s._rules : DEFAULT_RULES;                  // saved week: its own rules
+  if(isLiveRulesWeek(s)) return liveRules;                            // current week: live settings
+  const own = (s && s._rules) ? s._rules : DEFAULT_RULES;             // saved week: its own rules
+  // The latest saved week(s) always use the LIVE bonuses and city fees
+  // (e.g. the removed $13 gate fee); everything else stays as saved.
+  if(viewingArchiveIndex >= 0 && viewingArchiveIndex < LIVE_SAVED_WEEKS)
+    return Object.assign({}, own, { weeklyBonuses: liveRules.weeklyBonuses||[], cityFees: liveRules.cityFees||[] });
+  return own;
 }
 function rulesFor(day, city){ return getRules(state[day][city]); }
 function frRateFor(day, city){ return rulesFor(day, city).foodReliefRate; }
@@ -2914,6 +2972,18 @@ function renderSettings(){
       <td style="padding:6px;white-space:nowrap;font-family:'DM Mono',monospace;font-size:11px">${new Date(e.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</td>
       <td style="padding:6px;font-size:11px">${e.by}</td><td style="padding:6px;font-size:11px">${e.week}</td>
       <td style="padding:6px;font-size:12px"><strong>${e.action}</strong><br><span style="color:var(--text-muted)">${e.details}</span></td></tr>`).join('');
+  const viewWeek = tuesdayOf(CITIES.map(c=>state.Tuesday[c]&&state.Tuesday[c].date).filter(Boolean)[0]);
+  if(csvOriginalsWeek!==viewWeek) loadCsvOriginals(viewWeek);
+  const oRows = (csvOriginalsList||[]).map((x,i)=>`<tr style="border-top:1px solid #eee">
+      <td style="padding:6px;font-size:12px;white-space:nowrap">${x.city} · ${x.day}</td>
+      <td style="padding:6px"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;background:${x.kind==='est'?'#eef3fb':'#eef7ee'};color:${x.kind==='est'?'#3b5b8c':'#3c7a3c'}">${x.kind==='est'?'EST':'ACT'}</span></td>
+      <td style="padding:6px;font-size:11px;word-break:break-all">${x.fileName}<div style="color:var(--text-muted)">${new Date(x.uploadedAt).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})} · ${x.by||''}</div></td>
+      <td style="padding:6px"><button class="clear-btn" style="padding:5px 10px" onclick="downloadOriginalCsv(${i})">⬇</button></td></tr>`).join('');
+  html += card('📁 Original CSVs — '+viewedWeekLabel(), 'Every Routific CSV uploaded is kept exactly as it was, so a week can always be rebuilt from its original files (download, then drop them into "Upload all CSVs at once"). Kept from this version onwards.',
+    csvOriginalsList===null || csvOriginalsWeek!==viewWeek ? '<div style="font-size:12px;color:var(--text-muted)">Loading…</div>'
+    : oRows ? `<div style="max-height:300px;overflow:auto"><table style="width:100%;border-collapse:collapse">${oRows}</table></div>
+               <button class="clear-btn" style="margin-top:10px" onclick="downloadAllOriginalCsvs()">⬇ Download all (${csvOriginalsList.length})</button>`
+    : '<div style="font-size:12px;color:var(--text-muted)">No original CSVs kept for this week yet.</div>');
   if(backupList===null) loadBackupList();
   const bRows = (backupList||[]).slice(0,60).map((b,i)=>`<tr style="border-top:1px solid #eee">
       <td style="padding:6px;font-size:12px"><strong>${b.label}</strong>${b.original?' <span style="font-size:10px;font-weight:700;color:#fff;background:#569556;padding:2px 6px;border-radius:5px">ORIGINAL</span>':''}<div style="font-size:11px;color:var(--text-muted)">${weekSummary(b.snapshot)}</div></td>
@@ -3072,7 +3142,7 @@ async function patchLatestSavedWeeks(){
     try {
       if(window._firebaseReady && window._db && snap._id){
         const { doc, setDoc } = window._firestoreFns;
-        await backupWeekDoc(snap._id, 'Before bonus/fee update');
+        if(!(await backupWeekDoc(snap._id, 'Before bonus/fee update'))){ console.warn('Backup failed — '+snap.label+' not changed'); alert('Could not keep a copy of '+snap.label+', so its bonus/fee update was NOT saved. Check the Firestore Rules allow "weekArchiveBackups".'); continue; }
         await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
       }
     } catch(e){ console.error('Could not save '+snap.label+':', e); alert('Could not update '+snap.label+' — please try again.'); continue; }
@@ -5002,7 +5072,7 @@ async function dedupeArchiveOnce(){
     if(!toDelete.length){ console.log('✓ No duplicate weeks to clean up'); return; }
     console.log('🧹 Cleaning up '+toDelete.length+' duplicate week archive(s)...');
     for(const id of toDelete){
-      await backupWeekDoc(id, 'Before duplicate cleanup');
+      if(!(await backupWeekDoc(id, 'Before duplicate cleanup'))) continue;
       await deleteDoc(doc(window._db, 'weekArchive', id));
     }
     console.log('✓ Cleanup done. Reloading archive...');
