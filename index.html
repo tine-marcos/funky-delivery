@@ -552,6 +552,7 @@
   <div class="week-nav-right">
 
     <button class="save-week-btn" onclick="saveCurrentWeek()">💾 Save Week</button>
+    <button class="save-week-btn" id="unlockBtn" style="display:none;background:#fff3f3;color:#8a1f1f;border:1px solid #e6595c" onclick="toggleWeekLock()">🔓 Unlock to edit</button>
     <button class="save-week-btn" style="background:var(--cream-dark);color:var(--text);border:1px solid var(--border)" onclick="startNewWeek()">🔄 Start New Week</button>
   </div>
 </div>
@@ -619,6 +620,7 @@ function auDate(d){if(!d)return'—';const p=d.split('-');return p.length===3?p[
 
 // ── AUTO DATE FROM TUESDAY ────────────────────────────────────────────────────
 function setTuesdayDate(city, tuesdayVal){
+  if(guardSavedWeek()){ buildMain(); return; }
   // Set Tuesday for all cities
   CITIES.forEach(c => { if(state['Tuesday'][c]) state['Tuesday'][c].date = tuesdayVal; });
   // Auto-fill Wed, Thu, Fri, Sat by adding days from Tuesday
@@ -753,6 +755,20 @@ function updateWeekNav(){
   // Save Week always enabled
   const saveBtn = document.querySelector('.save-week-btn');
   if(saveBtn){ saveBtn.disabled = false; saveBtn.style.opacity = '1'; }
+  const ub = document.getElementById('unlockBtn');
+  if(ub){
+    const onSaved = viewingArchiveIndex >= 0;
+    ub.style.display = onSaved ? '' : 'none';
+    if(onSaved){
+      const locked = isSavedWeekLocked();
+      ub.textContent = locked ? '🔓 Unlock to edit' : '🔒 Lock again';
+      ub.style.background = locked ? '#fff3f3' : 'var(--olive-pale)';
+      ub.style.color = locked ? '#8a1f1f' : 'var(--olive)';
+      ub.style.borderColor = locked ? '#e6595c' : 'var(--olive)';
+      if(saveBtn && locked){ saveBtn.disabled = true; saveBtn.style.opacity = '.45'; }
+      if(badge) badge.textContent = (locked?'🔒 SAVED · READ-ONLY':'🔓 SAVED · UNLOCKED')+' ('+(viewingArchiveIndex+1)+' of '+weekArchive.length+')';
+    }
+  }
 }
 
 function startNewWeek(){
@@ -889,6 +905,11 @@ async function saveCurrentWeek(){
   // on-off (so they aren't replaced with today's values).
   const resavingViewed = viewingArchiveIndex >= 0 && existingIdx >= 0;
   const prevSnap = resavingViewed ? weekArchive[existingIdx] : null;
+  if(existingIdx >= 0 && !resavingViewed){
+    alert('🔒 "'+label+'" is already saved, and saved weeks can\'t be overwritten from the current week.\n\nTo change the saved week: open it with ‹, click "🔓 Unlock to edit", make the changes there, then Save Week.\n\nIf the current week has the wrong dates, change the Tuesday date first.');
+    return;
+  }
+  if(resavingViewed && guardSavedWeek()) return;
   if(existingIdx >= 0){
     if(!confirm(resavingViewed
       ? 'Re-save the saved week "'+label+'" with the changes made on it?\n\nIts place in the week list and its fuel prices stay as they were.'
@@ -954,6 +975,7 @@ async function saveCurrentWeek(){
     // Save to Firebase using the STABLE id (overwrites instead of duplicates)
     if(window._firebaseReady && window._db){
       const { doc, setDoc, getDocs, collection, deleteDoc } = window._firestoreFns;
+      await backupWeekDoc(stableId, 'Before Save Week');
       await setDoc(doc(window._db, 'weekArchive', stableId), snapshot);
       console.log('Saved to Firebase:', stableId);
 
@@ -968,6 +990,7 @@ async function saveCurrentWeek(){
           }
         });
         for(const id of toDelete){
+          await backupWeekDoc(id, 'Before duplicate cleanup');
           await deleteDoc(doc(window._db, 'weekArchive', id));
           console.log('🗑 Deleted duplicate:', id);
         }
@@ -992,6 +1015,7 @@ let savedCurrentFR = null;
 let savedCurrentFuel = null;
 
 function navigateWeek(dir){
+  unlockedWeekId = null; // leaving a week always locks it again
   if(dir === -1){
     // going back — save current week state first if not already archived
     if(viewingArchiveIndex < 0){
@@ -1340,6 +1364,7 @@ function bulkRowProblems(it){
 }
 
 async function onBulkFiles(fileList){
+  if(guardSavedWeek()) return;
   const files = [...fileList].filter(f=>/\.csv$/i.test(f.name));
   if(!files.length){ alert('Please choose Routific .csv files.'); return; }
   bulkItems = [];
@@ -1368,11 +1393,11 @@ function renderBulkPreview(){
     const probs = bulkRowProblems(it);
     const status = it.skip ? '<span style="color:var(--text-muted)">Skipped</span>'
       : probs.length ? `<span style="color:#c0392b">⚠️ ${probs.join('<br>⚠️ ')}</span>`
-      : `<span style="color:#569556">✅ Ready${state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] && isRateWeekEligible(state[it.day][it.city]) ? ' — will be added as an extra CSV' : (state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] ? ' — will REPLACE the loaded CSV' : '')}</span>`;
+      : `<span style="color:#569556">✅ Ready${it.type==='both' ? ' — loads as Estimated, then as Actuals' : (state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] && isRateWeekEligible(state[it.day][it.city]) ? ' — will be added as an extra CSV' : (state[it.day][it.city][it.type==='est'?'estLoaded':'actLoaded'] ? ' — will REPLACE the loaded CSV' : ''))}</span>`;
     const notes = it.issues.filter(x=>!probs.includes(x)).map(x=>`<div style="color:#b9770e;font-size:11px">${x}</div>`).join('');
     return `<tr style="border-top:1px solid #eee;${it.skip?'opacity:.5':''}">
       <td style="padding:8px;font-size:11px;max-width:230px;word-break:break-all">${it.fileName}<div style="color:var(--text-muted);font-size:10px">${it.depot||''}</div>${notes}</td>
-      <td style="padding:8px">${sel(i,'type',it.type,[['est','Estimated'],['act','Actuals']])}</td>
+      <td style="padding:8px">${sel(i,'type',it.type,[['est','Estimated'],['act','Actuals'],['both','Both (Est + Act)']])}</td>
       <td style="padding:8px">${sel(i,'city',it.city,CITIES.map(c=>[c,c]))}</td>
       <td style="padding:8px">${sel(i,'day',it.day,ALL_DAYS.map(d=>[d,d]))}<div style="font-size:10px;color:var(--text-muted)">${it.date?auDate(it.date):'no date in file'}</div></td>
       <td style="padding:8px;font-size:12px;text-align:center">${it.drivers}</td>
@@ -1400,18 +1425,21 @@ function waitForLoad(prevLen){
   return new Promise(res=>{ const t0=Date.now(); const tick=()=>{ if(changeLog.length>prevLen || Date.now()-t0>4000) setTimeout(res,250); else setTimeout(tick,40); }; tick(); });
 }
 async function applyBulk(){
+  if(guardSavedWeek()) return;
   const items = bulkItems.filter(it=>!it.skip && !bulkRowProblems(it).length);
   if(!items.length) return;
   const ov = document.getElementById('bulkOverlay'); if(ov) ov.remove();
   // Estimated first, then Actuals; keep file order within each
-  const ordered = items.filter(i=>i.type==='est').concat(items.filter(i=>i.type==='act'));
+  // "Both" = a completed-route file used for the plan (Estimated) AND the actuals
+  const ordered = items.filter(i=>i.type==='est'||i.type==='both').map(i=>({...i, as:'est'}))
+    .concat(items.filter(i=>i.type==='act'||i.type==='both').map(i=>({...i, as:'act'})));
   for(const it of ordered){
     const f = new File([it.text], it.fileName, {type:'text/csv'});
     const before = changeLog.length;
-    if(it.type==='est') loadEst(it.day, it.city, f); else loadAct(it.day, it.city, f);
+    if(it.as==='est') loadEst(it.day, it.city, f); else loadAct(it.day, it.city, f);
     await waitForLoad(before);
   }
-  logChange('Uploaded all CSVs at once', ordered.map(i=>(i.type==='est'?'Est':'Act')+' '+i.city+' '+i.day+': '+i.fileName).join(' | '));
+  logChange('Uploaded all CSVs at once', ordered.map(i=>(i.as==='est'?'Est':'Act')+' '+i.city+' '+i.day+': '+i.fileName).join(' | '));
   bulkItems = [];
   buildTabs(); buildMain();
   alert('✅ Loaded '+ordered.length+' CSV(s). Check the Weekly Summary for warnings.');
@@ -1513,6 +1541,17 @@ function buildMain() {
     <div class="city-body" id="body-${day}-${city}">${buildCityBody(day, city)}</div>`;
   main.appendChild(sec);
   setupDrop(day, city);
+  if(isSavedWeekLocked()){
+    const note = document.createElement('div');
+    note.className = 'status-banner error';
+    note.innerHTML = '<span style="font-size:16px">🔒</span><span><strong>Saved week — read-only.</strong> Click <strong>🔓 Unlock to edit</strong> in the week bar to change it. A copy is kept before any change.</span>';
+    main.insertBefore(note, main.firstChild);
+    main.querySelectorAll('input, select').forEach(el=>{ el.disabled = true; });
+    main.querySelectorAll('button').forEach(el=>{
+      const oc = el.getAttribute('onclick')||'';
+      if(/removeUpload|fEst-|fAct-|clearAllCsvs|clearCity|bulkInput/.test(oc)){ el.disabled = true; el.style.opacity = '.4'; el.style.cursor = 'not-allowed'; }
+    });
+  }
 }
 
 // ── CITY BODY ─────────────────────────────────────────────────────────────────
@@ -1683,6 +1722,7 @@ function buildFilesRow(day, city){
 //   Actuals: clears only the actuals that file filled.
 // Everyone else is left exactly as they are.
 function removeUpload(day, city, kind, index){
+  if(guardSavedWeek()) return;
   const s = state[day][city];
   if(!isRateWeekEligible(s)) return;
   const est = getUploads(s,'est'), act = getUploads(s,'act');
@@ -1898,8 +1938,16 @@ function normalizeNewRoutific(rows, mode, taken){
     b.rows.forEach(r => {
       const cust = get(r,'Customer name');
       let stop, startAt, finishBy = '';
-      if(cust==='-- START DEPOT --'){ stop = 0;   startAt = get(r,'Planned departure time') || get(r,'Planned arrival time'); }
-      else if(cust==='-- END DEPOT --'){ stop = 999; startAt = get(r,'Planned arrival time') || get(r,'Planned departure time'); }
+      // Each mode reads ONE set of times (planned for Estimated, actual for
+      // Actuals) so the after-midnight check below never mixes the two. In a
+      // completed route "Start At" holds the ACTUAL time, so Estimated uses
+      // "Planned arrival time" first.
+      if(cust==='-- START DEPOT --'){ stop = 0;
+        startAt = mode==='act' ? (get(r,'Actual departure time') || get(r,'Planned departure time') || get(r,'Planned arrival time'))
+                               : (get(r,'Planned departure time') || get(r,'Planned arrival time')); }
+      else if(cust==='-- END DEPOT --'){ stop = 999;
+        startAt = mode==='act' ? (get(r,'Actual arrival time') || '')
+                               : (get(r,'Planned arrival time') || get(r,'Planned departure time')); }
       else if(mode==='act'){
         stop = get(r,'Stop sequence');
         startAt = get(r,'Actual arrival time') || get(r,'Delivery attempt time');
@@ -1907,7 +1955,7 @@ function normalizeNewRoutific(rows, mode, taken){
       }
       else {
         stop = get(r,'Stop sequence');
-        startAt = get(r,'Start At') || get(r,'Planned arrival time');
+        startAt = get(r,'Planned arrival time') || get(r,'Start At');
         finishBy = get(r,'Planned departure time');
       }
       const sa = seq(startAt), fb = seq(finishBy);
@@ -1939,6 +1987,7 @@ function parseEstRows(rows){
 }
 
 function loadEst(day,city,file){
+  if(guardSavedWeek()) return;
   const reader=new FileReader();
   reader.onload=e=>{
     let rows=parseCSV(e.target.result.replace(/^﻿/,''));
@@ -2023,6 +2072,7 @@ function addEstimatedCsv(day, city, file, text){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function loadAct(day,city,file){
+  if(guardSavedWeek()) return;
   const reader=new FileReader();
   reader.onload=e=>{
     let rows=parseCSV(e.target.result.replace(/^\uFEFF/,''));
@@ -2231,8 +2281,135 @@ function getHourlyRate(s){
 // Writes the saved week being viewed back to the archive (Firebase +
 // localStorage) after a rate change on it. Only the day/cities that exist in
 // that saved week are written, so nothing from the current week leaks in.
+// ── 🔒 SAVED WEEKS ARE READ-ONLY ──────────────────────────────────────────────
+// A saved week can't be changed unless it's unlocked first (🔓 button in the
+// week bar). It locks again as soon as you leave it. Before every change to a
+// saved week, a copy is kept (⚙️ Settings → Backups), and the very first copy
+// of each week is kept forever as its ORIGINAL.
+// "Save Week" from the current week can never overwrite a saved week.
+let unlockedWeekId = null;
+function viewedSavedWeek(){ return viewingArchiveIndex >= 0 ? weekArchive[viewingArchiveIndex] : null; }
+function weekKey(w){ return w ? (w._id || w.label) : null; }
+function isSavedWeekLocked(){ const w = viewedSavedWeek(); return !!w && unlockedWeekId !== weekKey(w); }
+function guardSavedWeek(){
+  if(!isSavedWeekLocked()) return false;
+  alert('🔒 "'+viewedSavedWeek().label+'" is a saved week and is locked.\n\nTo change it, click "🔓 Unlock to edit" in the week bar first. A copy of the saved week is kept before any change.');
+  return true;
+}
+function toggleWeekLock(){
+  const w = viewedSavedWeek(); if(!w) return;
+  if(isSavedWeekLocked()){
+    if(!confirm('Unlock "'+w.label+'" for editing?\n\n• A copy of the saved week is kept before every change (⚙️ Settings → Backups)\n• Its first copy is kept forever as the ORIGINAL\n• It locks again as soon as you leave this week')) return;
+    unlockedWeekId = weekKey(w);
+    logChange('Saved week unlocked', w.label);
+  } else {
+    unlockedWeekId = null;
+  }
+  updateWeekNav(); buildMain();
+}
+
+// ── 🛟 BACKUPS & RESTORE ──────────────────────────────────────────────────────
+// Before a saved week is overwritten or deleted, the old copy is kept in
+// Firestore 'weekArchiveBackups' (newest 15 per week). ⚙️ Settings → Backups
+// lists them and can restore one. A backup JSON file (exported from a
+// browser's local copy) can also be restored there.
+function loadedCellCount(st){
+  let n = 0;
+  if(!st) return 0;
+  ALL_DAYS.forEach(d=>DAY_CITIES[d].forEach(c=>{ if(st[d] && st[d][c] && st[d][c].estLoaded) n++; }));
+  return n;
+}
+function weekSummary(snap){
+  const parts = [];
+  ALL_DAYS.forEach(d=>DAY_CITIES[d].forEach(c=>{
+    const x = snap.state && snap.state[d] && snap.state[d][c];
+    if(x && x.estLoaded) parts.push(c.slice(0,3).toUpperCase()+' '+d.slice(0,3)+(x.actLoaded?'':'*'));
+  }));
+  return parts.length ? parts.join(', ') : 'no data';
+}
+async function backupWeekDoc(id, reason){
+  try {
+    if(!window._firebaseReady || !window._db || !id) return;
+    const { doc, getDoc, setDoc, getDocs, collection, deleteDoc } = window._firestoreFns;
+    const snap = await getDoc(doc(window._db, 'weekArchive', id));
+    if(!snap.exists()) return;
+    const data = snap.data();
+    if(!loadedCellCount(data.state)) return; // nothing worth keeping
+    const at = new Date().toISOString();
+    const all = await getDocs(collection(window._db, 'weekArchiveBackups'));
+    const mine = []; all.forEach(d=>{ if(d.data().weekId===id) mine.push({id:d.id, at:d.data().backedUpAt, original:!!d.data().isOriginal}); });
+    const isOriginal = !mine.some(m=>m.original); // first copy ever of this week = its ORIGINAL
+    await setDoc(doc(window._db, 'weekArchiveBackups', id+'__'+Date.now()), { weekId:id, label:data.label||id, backedUpAt:at, by:whoAmI(), reason:reason||'', cells:loadedCellCount(data.state), isOriginal, snapshot:data });
+    // keep the ORIGINAL forever + the newest 15 other backups per week
+    const others = mine.filter(m=>!m.original).sort((a,b)=>b.at.localeCompare(a.at));
+    for(const old of others.slice(14)) await deleteDoc(doc(window._db, 'weekArchiveBackups', old.id));
+  } catch(e){ console.error('Backup failed:', e); }
+}
+let backupList = null;   // backups from Firestore
+let backupFileWeeks = null; // weeks found in an uploaded backup file
+async function loadBackupList(){
+  backupList = [];
+  try {
+    if(window._firebaseReady && window._db){
+      const { getDocs, collection } = window._firestoreFns;
+      const all = await getDocs(collection(window._db, 'weekArchiveBackups'));
+      all.forEach(d=>{ const x=d.data(); backupList.push({ docId:d.id, label:x.label, at:x.backedUpAt, by:x.by, reason:x.reason, cells:x.cells, original:!!x.isOriginal, snapshot:x.snapshot }); });
+      backupList.sort((a,b)=>b.at.localeCompare(a.at));
+    }
+  } catch(e){ console.error('Could not load backups:', e); }
+  if(activeTab==='Settings') renderSettings();
+}
+async function restoreWeekSnapshot(snapshot, source){
+  if(!snapshot || !snapshot.state){ alert('That backup has no week data.'); return; }
+  const id = snapshot._id || ('week_'+String(snapshot.label||'restored').replace(/[^a-zA-Z0-9]/g,'_'));
+  const cur = weekArchive.find(w=>w._id===id || w.label===snapshot.label);
+  if(!confirm('Restore "'+snapshot.label+'" from '+source+'?\n\nBackup has: '+weekSummary(snapshot)+'\nSaved now:  '+(cur?weekSummary(cur):'not saved')+'\n\nThe saved week will be replaced with the backup. (What\'s saved now is backed up first, so this can be undone.)')) return;
+  snapshot = JSON.parse(JSON.stringify(snapshot)); snapshot._id = id;
+  snapshot.restoredAt = new Date().toISOString();
+  try {
+    if(window._firebaseReady && window._db){
+      const { doc, setDoc } = window._firestoreFns;
+      await backupWeekDoc(id, 'Before restore');
+      await setDoc(doc(window._db, 'weekArchive', id), snapshot);
+    }
+    for(let i=weekArchive.length-1;i>=0;i--) if(weekArchive[i]._id===id || weekArchive[i].label===snapshot.label) weekArchive.splice(i,1);
+    weekArchive.push(snapshot);
+    weekArchive.sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+    try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+    logChange('Saved week restored', snapshot.label+' from '+source+' ('+weekSummary(snapshot)+')');
+    // if that week is open on screen, go back to the current week so it reloads cleanly
+    if(viewingArchiveIndex >= 0){ viewingArchiveIndex = 0; navigateWeek(1); }
+    updateWeekNav();
+    alert('✅ "'+snapshot.label+'" restored. Use ‹ to open it.');
+    loadBackupList();
+  } catch(e){ console.error(e); alert('Could not restore — please try again.'); }
+}
+function onBackupFile(input){
+  const f = input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const j = JSON.parse(e.target.result);
+      let weeks = [];
+      const arch = j.archive || j.funkyDeliveryArchive || (Array.isArray(j)?j:null);
+      if(Array.isArray(arch)) weeks = weeks.concat(arch);
+      const sess = j.session;
+      if(sess && sess.state){
+        const t = CITIES.map(c=>sess.state.Tuesday&&sess.state.Tuesday[c]&&sess.state.Tuesday[c].date).filter(Boolean)[0];
+        weeks.push({ label:(t?getWeekLabel(t):'Current week')+' (unsaved session)', _id:t?'week_'+t:undefined, savedAt:sess.savedAt||new Date().toISOString(), state:sess.state, frState:sess.frState||{}, fuelVehicleType:sess.fuelVehicleType||{}, invoiceSettings:sess.invoiceSettings||{} });
+      }
+      backupFileWeeks = weeks.filter(w=>w && w.state);
+      if(!backupFileWeeks.length) alert('No saved weeks found in that file.');
+    } catch(err){ alert('That file isn\'t a backup file.'); backupFileWeeks = null; }
+    renderSettings();
+  };
+  r.readAsText(f);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function saveViewedArchiveWeek(){
   if(viewingArchiveIndex < 0) return;
+  if(isSavedWeekLocked()){ console.warn('Saved week is locked — not saved'); return; }
   const snap = weekArchive[viewingArchiveIndex];
   if(!snap || !snap.state) return;
   ALL_DAYS.forEach(day=>{
@@ -2251,6 +2428,7 @@ async function saveViewedArchiveWeek(){
   try {
     if(window._firebaseReady && window._db && snap._id){
       const { doc, setDoc } = window._firestoreFns;
+      await backupWeekDoc(snap._id, 'Before saved-week update');
       await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
     }
   } catch(e){ console.error('Could not save rate change to saved week:', e); alert('Could not save the change to this saved week — please try again.'); }
@@ -2268,6 +2446,7 @@ function applyWeekRateToCurrentWeekCopy(v){
 
 // Called from the Rate / hr box (on change, not on every keystroke)
 function setHourlyRate(day, city, value){
+  if(guardSavedWeek()){ buildMain(); return; }
   const s = state[day][city];
   const input = document.getElementById('rate-'+day+'-'+city);
   const current = getHourlyRate(s);
@@ -2367,6 +2546,7 @@ function getDriverRate(day, city, name){
 
 // Called from a driver's Rate / hr box. Blank = go back to the week rate.
 function setDriverRate(day, city, name, value){
+  if(guardSavedWeek()){ buildMain(); return; }
   const s = state[day][city];
   const input = document.getElementById(`${day}-${city}_${name}_rate`);
   const current = getDriverRate(day, city, name);
@@ -2476,11 +2656,18 @@ const DEFAULT_RULES = {
 };
 let liveRules = JSON.parse(JSON.stringify(DEFAULT_RULES));
 
-// Settings (⚙️) are LIVE for the current week AND the most recently saved
-// week (weekArchive[0]) — the same way fuel prices work. Older saved weeks
-// keep the rules they were saved with.
+// Settings (⚙️) are applied in full to the CURRENT week and new weeks.
+// Saved weeks keep the rules they were saved with — EXCEPT the latest
+// LIVE_SAVED_WEEKS saved weeks, which also pick up changes to BONUSES and
+// CITY FEES only (e.g. removing the Sydney $13 gate fee). Nothing else on a
+// saved week is recalculated: rates, boxes, times, per-box min, food relief,
+// fuel and manual bonuses stay exactly as saved.
+const LIVE_SAVED_WEEKS = 1;
 function isLiveRulesWeek(s){
-  return isRateWeekEligible(s) && viewingArchiveIndex <= 0;
+  return isRateWeekEligible(s) && viewingArchiveIndex < 0;
+}
+function liveSavedWeekLabels(){
+  return weekArchive.slice(0, LIVE_SAVED_WEEKS).map(w=>w.label);
 }
 function getRules(s){
   if(!isRateWeekEligible(s)) return DEFAULT_RULES;                    // older weeks: original rules
@@ -2668,9 +2855,10 @@ function renderSettings(){
 
   let html = `<div style="max-width:980px">
     <div class="status-banner success" style="margin-bottom:16px"><span style="font-size:16px">⚙️</span><span>
-      Changes here apply to the <strong>most recent saved week</strong>${weekArchive[0]?' (<strong>'+weekArchive[0].label+'</strong>)':''},
-      the <strong>current week</strong> and every new week after — pay, invoices and totals are recalculated straight away.
-      Older saved weeks keep the rules they were saved with. Weeks before 19 Oct 2026 never change.</span></div>`;
+      Changes here apply in full to the <strong>current week</strong> and every new week.
+      The latest ${LIVE_SAVED_WEEKS} saved weeks${liveSavedWeekLabels().length?' (<strong>'+liveSavedWeekLabels().join('</strong>, <strong>')+'</strong>)':''}
+      only pick up <strong>bonus and city fee</strong> changes — everything else on them stays exactly as saved.
+      Older saved weeks and weeks before 19 Oct 2026 never change.</span></div>`;
   const fuelNow = (typeof R.fuelCompOn==='boolean') ? R.fuelCompOn : fuelCompEnabled;
   const sw = (on, onclick, label, sub) => `<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:260px">
       <button onclick="${onclick}" style="width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;position:relative;background:${on?'#4a7c59':'#d0d0c8'}">
@@ -2726,6 +2914,22 @@ function renderSettings(){
       <td style="padding:6px;white-space:nowrap;font-family:'DM Mono',monospace;font-size:11px">${new Date(e.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</td>
       <td style="padding:6px;font-size:11px">${e.by}</td><td style="padding:6px;font-size:11px">${e.week}</td>
       <td style="padding:6px;font-size:12px"><strong>${e.action}</strong><br><span style="color:var(--text-muted)">${e.details}</span></td></tr>`).join('');
+  if(backupList===null) loadBackupList();
+  const bRows = (backupList||[]).slice(0,60).map((b,i)=>`<tr style="border-top:1px solid #eee">
+      <td style="padding:6px;font-size:12px"><strong>${b.label}</strong>${b.original?' <span style="font-size:10px;font-weight:700;color:#fff;background:#569556;padding:2px 6px;border-radius:5px">ORIGINAL</span>':''}<div style="font-size:11px;color:var(--text-muted)">${weekSummary(b.snapshot)}</div></td>
+      <td style="padding:6px;font-size:11px;white-space:nowrap">${new Date(b.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}<div style="color:var(--text-muted)">${b.reason||''}</div></td>
+      <td style="padding:6px"><button class="clear-btn" style="padding:5px 10px" onclick="restoreWeekSnapshot(backupList[${i}].snapshot,'backup of '+backupList[${i}].at.slice(0,16).replace('T',' '))">Restore</button></td></tr>`).join('');
+  const fRows = (backupFileWeeks||[]).map((w,i)=>`<tr style="border-top:1px solid #eee">
+      <td style="padding:6px;font-size:12px"><strong>${w.label}</strong><div style="font-size:11px;color:var(--text-muted)">${weekSummary(w)}</div></td>
+      <td style="padding:6px;font-size:11px">saved ${w.savedAt?new Date(w.savedAt).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'—'}</td>
+      <td style="padding:6px"><button class="clear-btn" style="padding:5px 10px" onclick="restoreWeekSnapshot(backupFileWeeks[${i}],'backup file')">Restore</button></td></tr>`).join('');
+  html += card('🛟 Backups & restore', 'A copy of a saved week is kept automatically before it\'s overwritten. Restore one here, or load a backup file exported from another browser. (* = no actuals for that day)',
+    `<div style="font-size:12px;font-weight:600;margin-bottom:6px">Automatic backups</div>`
+    + (backupList===null ? '<div style="font-size:12px;color:var(--text-muted)">Loading…</div>'
+       : bRows ? `<div style="max-height:300px;overflow:auto"><table style="width:100%;border-collapse:collapse">${bRows}</table></div>` : '<div style="font-size:12px;color:var(--text-muted)">No backups yet — they start from this version.</div>')
+    + `<div style="font-size:12px;font-weight:600;margin:14px 0 6px">Restore from a backup file</div>
+       <input type="file" accept=".json" onchange="onBackupFile(this);this.value=''" style="font-size:12px">`
+    + (fRows ? `<div style="max-height:300px;overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse">${fRows}</table></div>` : ''));
   html += card('🕘 Change log', 'Rate changes, uploads, clears, saves and settings changes — newest first.',
     logRows ? `<div style="max-height:420px;overflow:auto"><table style="width:100%;border-collapse:collapse">${logRows}</table></div>` : '<div style="font-size:12px;color:var(--text-muted)">No changes logged yet.</div>');
   main.innerHTML = html + '</div>';
@@ -2780,106 +2984,108 @@ function setWeekSwitch(key, value){
     buildTabs(); buildMain();
   }
 }
-// Applies new rules to: the current week, the most recently saved week
-// (weekArchive[0]) and every new week. Older saved weeks are not changed.
+// Applies new rules in full to the current week and new weeks. The latest
+// saved weeks only get bonus / city fee changes (see patchLatestSavedWeeks).
 function applyRules(d, changes, question){
-  const recent = weekArchive[0];
-  if(!confirm(question+'\n\n• '+changes.join('\n• ')+'\n\nApplies to: the current week'
-      + (recent ? ', the most recent saved week ('+recent.label+')' : '')
-      + ' and every new week. Pay, invoices and totals are recalculated.'
+  const labels = liveSavedWeekLabels();
+  if(!confirm(question+'\n\n• '+changes.join('\n• ')+'\n\nApplies to: the current week and every new week.'
+      + (labels.length ? '\nThe latest saved week'+(labels.length>1?'s':'')+' ('+labels.join(', ')+') only get BONUS and CITY FEE changes — nothing else on them changes.' : '')
       + '\nOlder saved weeks and weeks before 19 Oct 2026 are NOT changed.')) return false;
   liveRules = JSON.parse(JSON.stringify(d));
   savePayRulesToFirebase();
   const stamp = st => { if(st && isRateWeekEligible(st)) st._rules = JSON.parse(JSON.stringify(liveRules)); };
   if(viewingArchiveIndex < 0){
-    // Viewing the current week — update it on screen
     ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
       const st = state[dy][c];
       if(isRateWeekEligible(st)){ stamp(st); if(st.estLoaded) recomputeAll(dy,c); }
     }));
     autoSaveSession();
-    recomputeMostRecentSavedWeek();
-  } else if(viewingArchiveIndex === 0){
-    // Viewing the most recent saved week — update it on screen and save it
-    ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
-      const st = state[dy][c];
-      if(isRateWeekEligible(st)){ stamp(st); if(st.estLoaded) recomputeAll(dy,c); }
-    }));
-    saveViewedArchiveWeek();
-  } else {
-    // Viewing an older saved week — it stays as it is; update the most recent saved week
-    recomputeMostRecentSavedWeek();
+  } else if(savedCurrentState){
+    // current week is recalculated with the new rules when you go back to it
+    ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>stamp(savedCurrentState[dy]&&savedCurrentState[dy][c])));
   }
-  // The current week (kept aside while a saved week is open) is recalculated
-  // with the new rules when you go back to it.
-  if(viewingArchiveIndex >= 0 && savedCurrentState) ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>stamp(savedCurrentState[dy]&&savedCurrentState[dy][c])));
   logChange('Settings changed', changes.join(' | '));
+  patchLatestSavedWeeks().then(done=>{
+    if(done.length){ logChange('Saved weeks: bonus/fee updated', done.join(' | ')); buildMain(); }
+  });
   return true;
 }
 
-// Recalculates the most recently saved week (weekArchive[0]) with the live
-// Settings rules in the background, then saves it (Firebase + localStorage).
-// Hourly rates, driver rates and fuel types stored with that week are kept.
-// Returns true if it was updated.
-async function recomputeMostRecentSavedWeek(onlyIfChanged){
-  const snap = weekArchive[0];
-  if(!snap || !snap.state) return false;
-  if(viewingArchiveIndex === 0) return false; // already on screen — handled there
-  const eligibleCells = [];
-  ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
-    const st = snap.state[dy] && snap.state[dy][c];
-    if(st && isRateWeekEligible(st)) eligibleCells.push([dy,c,st]);
-  }));
-  if(!eligibleCells.length) return false;
-  if(onlyIfChanged && !eligibleCells.some(([,,st])=>st.estLoaded && JSON.stringify(st._rules)!==JSON.stringify(liveRules))) return false;
+// Bonus + city fee total for one driver under a given set of rules
+function feeBonusFromRules(R, day, city, name){
+  let b = 0;
+  (R.weeklyBonuses||[]).forEach(r=>{ if(r.city===city && ruleDayMatch(r,day) && nameKey(r.driver)===nameKey(name)) b += +r.amount||0; });
+  (R.cityFees||[]).forEach(r=>{ if(r.city===city && ruleDayMatch(r,day)) b += +r.amount||0; });
+  return b;
+}
 
-  // Put what's on screen aside, load the saved week, recalculate, put it back
-  const stash = {
-    state: JSON.parse(JSON.stringify(state)),
-    fr: JSON.parse(JSON.stringify(frState)),
-    fuel: JSON.parse(JSON.stringify(fuelVehicleType)),
-    vai: viewingArchiveIndex
-  };
-  const swapIn = (st, fr, fuel) => {
-    ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
-      state[dy][c] = (st[dy] && st[dy][c]) ? JSON.parse(JSON.stringify(st[dy][c])) : { drivers:{}, date:'', estLoaded:false, actLoaded:false, _totals:{} };
-    }));
-    Object.keys(frState).forEach(k=>delete frState[k]); Object.assign(frState, JSON.parse(JSON.stringify(fr||{})));
-    Object.keys(fuelVehicleType).forEach(k=>delete fuelVehicleType[k]); Object.assign(fuelVehicleType, JSON.parse(JSON.stringify(fuel||{})));
-  };
-  window._computeNoDom = true;
-  viewingArchiveIndex = 0; // behave exactly as if this saved week were open
-  try {
-    swapIn(snap.state, snap.frState, snap.fuelVehicleType);
-    ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
-      const st = state[dy][c];
-      if(isRateWeekEligible(st)){ st._rules = JSON.parse(JSON.stringify(liveRules)); if(st.estLoaded) recomputeAll(dy,c); }
-    }));
-    ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
-      if(snap.state[dy] && snap.state[dy][c]) snap.state[dy][c] = JSON.parse(JSON.stringify(state[dy][c]));
-    }));
-    snap.netPayByCity = {
-      Brisbane:  computeCityNetPay('Brisbane'),
-      Sydney:    computeCityNetPay('Sydney'),
-      Melbourne: computeCityNetPay('Melbourne'),
-    };
-    snap.rulesUpdatedAt = new Date().toISOString();
-  } catch(e){
-    console.error('Could not recalculate the most recent saved week:', e);
-  } finally {
-    viewingArchiveIndex = stash.vai;
-    swapIn(stash.state, stash.fr, stash.fuel);
-    window._computeNoDom = false;
-  }
-  try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
-  try {
-    if(window._firebaseReady && window._db && snap._id){
-      const { doc, setDoc } = window._firestoreFns;
-      await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
+// Updates ONLY the bonus / city fee part of a saved week's pay. For each
+// driver: the difference between the old and new fixed bonus is added to
+// Final Pay. Nothing else is touched. Returns { changed, cityDelta, notes }.
+function patchFeesInWeekState(weekState){
+  const out = { changed:false, cityDelta:{}, notes:[] };
+  ALL_DAYS.forEach(day=>DAY_CITIES[day].forEach(city=>{
+    const s = weekState[day] && weekState[day][city];
+    if(!s || !isRateWeekEligible(s)) return;
+    const oldR = s._rules || DEFAULT_RULES;
+    if(JSON.stringify(oldR.weeklyBonuses||[])===JSON.stringify(liveRules.weeklyBonuses||[]) &&
+       JSON.stringify(oldR.cityFees||[])===JSON.stringify(liveRules.cityFees||[])) return;
+    const newR = JSON.parse(JSON.stringify(oldR));
+    newR.weeklyBonuses = JSON.parse(JSON.stringify(liveRules.weeklyBonuses||[]));
+    newR.cityFees      = JSON.parse(JSON.stringify(liveRules.cityFees||[]));
+    s._rules = newR;
+    out.changed = true;
+    let dayDelta = 0;
+    for(const name in (s.drivers||{})){
+      const d = s.drivers[name], c = d._c || (d._c = {});
+      if(typeof c.finalPay !== 'number') continue; // never calculated — nothing to adjust
+      const oldB = (typeof c.fixedBonus==='number') ? c.fixedBonus : feeBonusFromRules(oldR, day, city, name);
+      const newB = feeBonusFromRules(newR, day, city, name);
+      const delta = Math.round((newB - oldB)*100)/100;
+      if(!delta) continue;
+      c.fixedBonus = newB;
+      c.finalPay   = c.finalPay + delta;
+      const hrs = mD(d.depotStart, d.depotEnd);
+      if(hrs && hrs > 0) c.finalHourly = c.finalPay / hrs;
+      dayDelta += delta;
     }
-  } catch(e){ console.error('Could not save the most recent saved week:', e); alert('Could not save the settings change to '+snap.label+' — please try again.'); return false; }
-  console.log('Most recent saved week updated with the latest settings:', snap.label);
-  return true;
+    if(dayDelta){
+      if(s._totals && typeof s._totals.final==='number') s._totals.final += dayDelta;
+      out.cityDelta[city] = (out.cityDelta[city]||0) + dayDelta;
+      out.notes.push(city+' '+day+' '+(dayDelta>0?'+':'')+dayDelta.toFixed(2));
+    }
+  }));
+  return out;
+}
+
+// Applies the fee-only patch to the latest saved weeks and saves them.
+// A backup of each week is kept first (⚙️ Settings → Backups).
+async function patchLatestSavedWeeks(){
+  const done = [];
+  for(let i=0; i<Math.min(LIVE_SAVED_WEEKS, weekArchive.length); i++){
+    const snap = weekArchive[i];
+    if(!snap || !snap.state) continue;
+    const res = patchFeesInWeekState(snap.state);
+    if(!res.changed) continue;
+    if(snap.netPayByCity) for(const c in res.cityDelta) if(typeof snap.netPayByCity[c]==='number') snap.netPayByCity[c] += res.cityDelta[c];
+    snap.feesUpdatedAt = new Date().toISOString();
+    try {
+      if(window._firebaseReady && window._db && snap._id){
+        const { doc, setDoc } = window._firestoreFns;
+        await backupWeekDoc(snap._id, 'Before bonus/fee update');
+        await setDoc(doc(window._db, 'weekArchive', snap._id), snap);
+      }
+    } catch(e){ console.error('Could not save '+snap.label+':', e); alert('Could not update '+snap.label+' — please try again.'); continue; }
+    // if this saved week is open on screen, show the updated figures
+    if(viewingArchiveIndex === i){
+      ALL_DAYS.forEach(dy=>DAY_CITIES[dy].forEach(c=>{
+        if(snap.state[dy] && snap.state[dy][c]) state[dy][c] = JSON.parse(JSON.stringify(snap.state[dy][c]));
+      }));
+    }
+    done.push(snap.label+(res.notes.length?': '+res.notes.join(', '):': no driver pay changed'));
+  }
+  if(done.length) try { localStorage.setItem('funkyDeliveryArchive', JSON.stringify(weekArchive)); } catch(e){}
+  return done;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4021,6 +4227,7 @@ function dl(csv,name){const a=document.createElement('a');a.href=URL.createObjec
 // Keeps: the delivery date and the week's hourly rate. Other days/cities,
 // Food Relief, Fuel and driver rate overrides are not touched.
 function clearAllCsvs(day, city){
+  if(guardSavedWeek()) return;
   const s = state[day][city];
   if(!isRateWeekEligible(s)){ clearCity(day, city); return; }
   const onSaved = viewingArchiveIndex >= 0;
@@ -4041,6 +4248,7 @@ function clearAllCsvs(day, city){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function clearCity(day,city){
+  if(guardSavedWeek()) return;
   const date=state[day][city].date;
   state[day][city]={drivers:{},date,estLoaded:false,actLoaded:false,_totals:{}};
   updateDot(day,city);buildMain();
@@ -4794,6 +5002,7 @@ async function dedupeArchiveOnce(){
     if(!toDelete.length){ console.log('✓ No duplicate weeks to clean up'); return; }
     console.log('🧹 Cleaning up '+toDelete.length+' duplicate week archive(s)...');
     for(const id of toDelete){
+      await backupWeekDoc(id, 'Before duplicate cleanup');
       await deleteDoc(doc(window._db, 'weekArchive', id));
     }
     console.log('✓ Cleanup done. Reloading archive...');
@@ -4821,10 +5030,11 @@ window._onFirebaseReady = async function(){
   await loadChangeLog();
   // Then load session — but DON'T let it call loadArchiveFromFirebase again
   await autoLoadSession();
-  // Make sure the most recent saved week uses the current ⚙️ Settings
-  // (e.g. a fee removed after the week was saved).
-  if(await recomputeMostRecentSavedWeek(true)){
-    logChange('Most recent saved week updated', (weekArchive[0]&&weekArchive[0].label)+' recalculated with the current settings');
+  // Latest saved weeks: bring BONUSES / CITY FEES in line with ⚙️ Settings
+  // (e.g. the $13 gate fee removed after a week was saved). Nothing else changes.
+  const synced = await patchLatestSavedWeeks();
+  if(synced.length){
+    logChange('Saved weeks: bonus/fee updated', synced.join(' | '));
     buildMain();
   }
   // Refresh nav now that everything is loaded
